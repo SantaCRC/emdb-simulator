@@ -2,15 +2,16 @@ import sys
 import os
 import numpy as np
 import robosuite as suite
-
+from robosuite_ros.grippers.qbhand2m_gripper import QbHand2MGripper
 
 def main():
     env = suite.make(
         env_name="Lift",
-        robots="Panda",
+        robots="UR5e",
         has_renderer=True,
         has_offscreen_renderer=False,
         use_camera_obs=False,
+        gripper_types="QbHand2MGripper",
     )
 
     env.reset()
