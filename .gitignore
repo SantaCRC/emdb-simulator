@@ -4,3 +4,7 @@ ros_packages/build/
 ros_packages/install/
 ros_packages/log/
 temp/
+*.pyc
+*/__pycache__/
+__pycache__/
+MUJOCO_LOG.TXT
