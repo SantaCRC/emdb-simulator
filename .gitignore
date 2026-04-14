@@ -1,1 +1,6 @@
 .tfm/
+.vscode/
+ros_packages/build/
+ros_packages/install/
+ros_packages/log/
+temp/
