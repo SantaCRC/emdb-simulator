@@ -75,7 +75,7 @@ class QbHand2MGripperBase(GripperModel):
 
     @property
     def speed(self):
-        return 0.2
+        return 3.0
 
     @property
     def dof(self):
@@ -83,8 +83,13 @@ class QbHand2MGripperBase(GripperModel):
 
     def format_action(self, action):
         assert len(action) == self.dof
-        synergy_cmd     = (action[0] + 1.0) / 2.0
-        manipulation_cmd = action[1]
+        # Whole-hand mode: action[0] closes all fingers through synergy.
+        # action[1] can bias thumb opposition; with 0.0 thumb still follows
+        # the main close/open command.
+        main_cmd = np.clip(action[0], -1.0, 1.0)
+        thumb_bias = np.clip(action[1], -1.0, 1.0)
+        synergy_cmd = main_cmd
+        manipulation_cmd = np.clip(0.7 * main_cmd + 0.3 * thumb_bias, -1.0, 1.0)
         return np.array([synergy_cmd, manipulation_cmd])
 
 
@@ -106,9 +111,9 @@ class QbHand2MGripper(QbHand2MGripperBase):
     def format_action(self, action):
         """
         Cierre completo al enviar action=[1, 0]:
-          - action[0]=1  -> synergy=1.0 (mano cerrada)
+                    - action[0]=1  -> synergy=1.0 (mano cerrada)
           - action[1]=0  -> manipulation=0.0 (sin oposición)
         Apertura al enviar action=[-1, 0]:
-          - action[0]=-1 -> synergy=0.0 (mano abierta)
+                    - action[0]=-1 -> synergy=-1.0 (mano abierta)
         """
         return super().format_action(action)
