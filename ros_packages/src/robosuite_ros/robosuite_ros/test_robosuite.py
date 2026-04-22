@@ -41,15 +41,15 @@ def main():
 
         arm_dims = action_shape[0] - 2
 
-        def step_arm_grip(grip_cmd, manipulation_cmd=0.0, n=1, phase=0.0):
+        def step_arm_grip(grip_cmd, manipulation_cmd=0.0, n=1, phase=0.0, arm_gain=1.0):
             for i in range(n):
                 t = phase + float(i)
                 arm_cmd = np.zeros(arm_dims, dtype=float)
                 # Oscillate the first 2 arm channels to make robot motion visible.
                 if arm_dims > 0:
-                    arm_cmd[0] = 0.08 * np.sin(0.03 * t)
+                    arm_cmd[0] = arm_gain * 0.08 * np.sin(0.03 * t)
                 if arm_dims > 1:
-                    arm_cmd[1] = 0.06 * np.cos(0.025 * t)
+                    arm_cmd[1] = arm_gain * 0.06 * np.cos(0.025 * t)
                 action = make_arm_grip_action(
                     action_shape,
                     arm_cmd=arm_cmd,
@@ -61,21 +61,21 @@ def main():
         step_count = 0
 
         # Open hand
-        step_arm_grip(-1.0, 0.0, n=80, phase=step_count)
+        step_arm_grip(-1.0, -1.0, n=80, phase=step_count)
         step_count += 80
 
         # Close hand with smooth ramp to avoid dynamic spikes.
         for g in np.linspace(-1.0, 1.0, 220):
-            step_arm_grip(float(g), 0.0, n=1, phase=step_count)
+            step_arm_grip(float(g), float(g), n=1, phase=step_count)
             step_count += 1
 
-        # Hold close
-        step_arm_grip(1.0, 0.0, n=60, phase=step_count)
-        step_count += 60
+        # Hold fully closed with arm still so closure is clearly visible.
+        step_arm_grip(1.0, 1.0, n=160, phase=step_count, arm_gain=0.0)
+        step_count += 160
 
         # Open hand again with smooth ramp.
         for g in np.linspace(1.0, -1.0, 260):
-            step_arm_grip(float(g), 0.0, n=1, phase=step_count)
+            step_arm_grip(float(g), float(g), n=1, phase=step_count)
             step_count += 1
 
         print("test_robosuite completed")

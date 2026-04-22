@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'robosuite_ros'
+package_name = 'maniskill_ros'
 
 setup(
     name=package_name,
@@ -24,9 +24,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'test_robosuite = robosuite_ros.test_robosuite:main',
-            'test_pick = robosuite_ros.test_pick:main',
-            'robosuite_bridge = robosuite_ros.robosuite_bridge_node:main',
+            'test_maniskill = maniskill_ros.test_maniskill:main',
         ],
     },
 )

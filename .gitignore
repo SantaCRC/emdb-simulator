@@ -10,3 +10,6 @@ __pycache__/
 MUJOCO_LOG.TXT
 misc/mujoco*/
 misc/ur_softhand/
+build/
+install/
+log/

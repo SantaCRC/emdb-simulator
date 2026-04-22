@@ -84,12 +84,11 @@ class QbHand2MGripperBase(GripperModel):
     def format_action(self, action):
         assert len(action) == self.dof
         # Whole-hand mode: action[0] closes all fingers through synergy.
-        # action[1] can bias thumb opposition; with 0.0 thumb still follows
-        # the main close/open command.
+        # Keep full closure tied to action[0] so the hand closes completely
+        # even if action[1] is set to 0.0 by upstream code.
         main_cmd = np.clip(action[0], -1.0, 1.0)
-        thumb_bias = np.clip(action[1], -1.0, 1.0)
         synergy_cmd = main_cmd
-        manipulation_cmd = np.clip(0.7 * main_cmd + 0.3 * thumb_bias, -1.0, 1.0)
+        manipulation_cmd = main_cmd
         return np.array([synergy_cmd, manipulation_cmd])
 
 
