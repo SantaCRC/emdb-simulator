@@ -8,3 +8,12 @@ from mani_skill.agents.registration import register_agent
 class UR5e(BaseAgent):
     uid = "ur5e"
     mjcf_path = ur5e_mj_description.MJCF_PATH
+
+    # RoboCasa attributes
+    front_facing_size = 0.5
+
+    keyframes = {
+        "rest": {
+            "qpos": [0, -1.5708, 1.5708, -1.5708, -1.5708, 0]
+        }
+    }

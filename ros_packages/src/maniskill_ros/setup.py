@@ -24,6 +24,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
+            'maniskill_bridge = maniskill_ros.maniskill_bridge_node:main',
             'test_maniskill = maniskill_ros.test_maniskill:main',
         ],
     },
