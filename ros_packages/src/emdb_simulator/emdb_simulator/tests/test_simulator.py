@@ -88,6 +88,11 @@ class GymMujocoRos2Bridge(Node):
 
         self.declare_parameter("render_mode", "human")
         self.declare_parameter("rate_hz", 50.0)
+        self.declare_parameter("joint_state_topic", "/state/joint_states")
+        self.declare_parameter("cmd_topic", "/cmd/action")
+
+        joint_state_topic =  self.get_parameter("joint_state_topic").value
+        cmd_topic = self.get_parameter("cmd_topic").value
 
         render_mode = self.get_parameter("render_mode").value
         rate_hz = float(self.get_parameter("rate_hz").value)
@@ -101,10 +106,10 @@ class GymMujocoRos2Bridge(Node):
 
         self.current_action = np.zeros(self.env.action_space.shape[0], dtype=np.float32)
 
-        self.joint_pub = self.create_publisher(JointState, "/state/joint_states", 10)
+        self.joint_pub = self.create_publisher(JointState, joint_state_topic, 10)
         self.create_subscription(
             Float64MultiArray,
-            "/cmd/action",
+            cmd_topic,
             self.cmd_callback,
             10,
         )
@@ -184,11 +189,12 @@ def main(args=None):
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
-        pass
+        env = node.env.unwrapped
+        env.close()
     finally:
-        node.env.close()
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":
