@@ -41,6 +41,10 @@ setup(
             os.path.join('share', package_name, 'config', 'scenarios'),
             glob('config/scenarios/*.yaml')
         ),
+        (
+            os.path.join('share', package_name, 'config', 'arenas'),
+            glob('config/arenas/*.yaml')
+        ),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -52,6 +56,8 @@ setup(
     entry_points={
         'console_scripts': [
             'test_simulator = emdb_simulator.tests.test_simulator:main',
+            'test_world_loader = emdb_simulator.tests.test_world_loader:main',
+            'test_arena_loader = emdb_simulator.tests.test_base_arena_loader:main',
         ],
     },
 )

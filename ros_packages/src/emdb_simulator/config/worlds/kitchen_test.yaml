@@ -1,0 +1,43 @@
+name: kitchen_test
+
+textures:
+  - name: floor_tex
+    type: 2d
+    builtin: checker
+    rgb1: [0.15, 0.15, 0.15]
+    rgb2: [0.85, 0.85, 0.85]
+    width: 256
+    height: 256
+
+  - name: wall_tex
+    type: 2d
+    file: /home/fabian/Documents/TFM/misc/robocasa/robocasa/models/assets/textures/bricks/option1.png
+
+materials:
+  - name: floor_mat
+    texture: floor_tex
+    texrepeat: [6, 6]
+    reflectance: 0.2
+    shininess: 0.1
+    specular: 0.1
+
+  - name: wall_mat
+    texture: wall_tex
+    texrepeat: [1, 1]
+    texuniform: true
+    reflectance: 0.1
+    shininess: 0.0
+    specular: 0.0
+
+room:
+  floor:
+    - name: floor_main
+      size: [2.75, 1.5, 0.02]
+      pos: [2.75, -1.5, 0.0]
+      material: floor_mat
+
+  walls:
+    - name: wall_back
+      size: [2.75, 0.02, 1.5]
+      pos: [2.75, 0.0, 1.5]
+      material: wall_mat

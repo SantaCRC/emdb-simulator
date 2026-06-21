@@ -1,0 +1,30 @@
+<mujoco model="empty_arena">
+  <option timestep="0.002" gravity="0 0 -9.81"/>
+
+  <asset>
+    <texture
+      builtin="gradient"
+      height="256"
+      width="256"
+      rgb1="0.98 0.98 1.00"
+      rgb2="0.06 0.08 0.12"
+      type="skybox"/>
+  </asset>
+
+  <worldbody>
+    <light
+      pos="2.0 -2.0 2.0"
+      dir="0.01 0.01 -1"
+      specular="0.3 0.3 0.3"
+      ambient="0.3 0.3 0.3"
+      diffuse="0.3 0.3 0.3"
+      directional="true"
+      castshadow="false"/>
+
+    <camera
+      name="main_camera"
+      mode="fixed"
+      pos="0 -6 2"
+      xyaxes="1 0 0 0 0 1"/>
+  </worldbody>
+</mujoco>
