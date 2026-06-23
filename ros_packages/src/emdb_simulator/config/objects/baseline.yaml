@@ -1,0 +1,19 @@
+objects:
+  - name: red_box
+    type: box
+    size: [0.03, 0.03, 0.03]
+    rgba: [0.8, 0.1, 0.1, 1.0]
+    placement:
+      mode: fixed
+      pos: [0.0, 0.0, 0.8]
+
+  - name: green_ball
+    type: sphere
+    size: [0.025]
+    rgba: [0.1, 0.8, 0.1, 1.0]
+    placement:
+      mode: random_choice
+      candidates:
+        - [0.2, 0.0, 0.8]
+        - [0.25, 0.1, 0.8]
+        - [0.15, -0.1, 0.8]
