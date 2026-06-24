@@ -1,3 +1,6 @@
 [submodule "misc/robosuite"]
 	path = misc/robosuite
 	url = https://github.com/SantaCRC/robosuite.git
+[submodule "misc/robocasa"]
+	path = misc/robocasa
+	url = https://github.com/SantaCRC/robocasa.git
