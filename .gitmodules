@@ -1,0 +1,3 @@
+[submodule "misc/robosuite"]
+	path = misc/robosuite
+	url = https://github.com/SantaCRC/robosuite.git
