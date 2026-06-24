@@ -4,7 +4,7 @@
 source ~/Documents/TFM/.tfm/bin/activate
 
 # 2. ROS2
-source /opt/ros/jazzy/setup.bash
+source /opt/ros/humble/setup.bash
 
 # 3. DDS
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp

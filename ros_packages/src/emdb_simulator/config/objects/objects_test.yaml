@@ -17,3 +17,14 @@ objects:
         - [0.2, 0.0, 0.8]
         - [0.25, 0.1, 0.8]
         - [0.15, -0.1, 0.8]
+
+        
+  - name: mug_xml
+    type: xml
+    xml_path: /home/santacrc/Documents/TFM/ros_packages/src/emdb_simulator/assets/robocasa/objects/objaverse/objaverse/mug/mug_0/model.xml
+    placement:
+      mode: random_choice
+      candidates:
+        - [0.2, 0.0, 0.8]
+        - [0.25, 0.1, 0.8]
+        - [0.15, -0.1, 0.8]

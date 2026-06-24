@@ -11,7 +11,11 @@ textures:
 
   - name: wall_tex
     type: 2d
-    file: /home/fabian/Documents/TFM/misc/robocasa/robocasa/models/assets/textures/bricks/option1.png
+    builtin: checker
+    rgb1: [0.15, 0.15, 0.15]
+    rgb2: [0.85, 0.85, 0.85]
+    width: 256
+    height: 256
 
 materials:
   - name: floor_mat

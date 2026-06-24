@@ -13,3 +13,5 @@ misc/ur_softhand/
 build/
 install/
 log/
+*.egg-info
+assets/
