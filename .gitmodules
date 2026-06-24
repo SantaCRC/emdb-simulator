@@ -4,3 +4,6 @@
 [submodule "misc/robocasa"]
 	path = misc/robocasa
 	url = https://github.com/SantaCRC/robocasa.git
+[submodule "misc/robosuite_models"]
+	path = misc/robosuite_models
+	url = https://github.com/SantaCRC/robosuite_models.git
