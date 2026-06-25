@@ -59,11 +59,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'test_simulator = emdb_simulator.tests.test_simulator:main',
-            'test_world_loader = emdb_simulator.tests.test_world_loader:main',
-            'test_arena_loader = emdb_simulator.tests.test_base_arena_loader:main',
-            'test_object_loader = emdb_simulator.tests.test_object_loader:main',
-            'rollout_node = emdb_simulator.core.robocasa_node:main',
+            'test_robocasa = emdb_simulator.core.robocasa_node:main',
+            'test_scene_loader = emdb_simulator.core.scene_loader:main',
         ],
     },
 )
