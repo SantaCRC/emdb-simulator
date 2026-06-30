@@ -19,5 +19,17 @@ def generate_launch_description():
                 'run_once': True,
                 'render': True,
             }],
-        )
+        ),
+        Node(
+            package='emdb_simulator',
+            executable='test_keyboard_client',
+            name='keyboard_client_node',
+            output='screen',
+        ),
+        Node(
+            package='emdb_simulator',
+            executable='test_position_server',
+            name='position_server_node',
+            output='screen',
+        ),
     ])

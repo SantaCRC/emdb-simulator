@@ -61,6 +61,8 @@ setup(
         'console_scripts': [
             'test_robocasa = emdb_simulator.core.robocasa_node:main',
             'test_scene_loader = emdb_simulator.core.scene_loader:main',
+            'test_keyboard_client = emdb_simulator.core.keyboard_client:main',
+            'test_position_server = emdb_simulator.core.position_server:main',
         ],
     },
 )
