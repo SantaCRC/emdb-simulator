@@ -16,14 +16,12 @@ from robocasa.wrappers.enclosing_wall_render_wrapper import (
     install_enclosing_wall_hotkeys,
 )
 
-from emdb_interfaces.srv import SetAction
+from emdb_interfaces.srv import SetDeltaAction
 
 
 class SceneLoader(Node):
     def __init__(self):
-        super().__init__("robocasa_scene_loader")
-
-        # Declare parameters
+        super().__init__("robocasa_rollout_node")
 
         self.declare_parameter("task", "Kitchen")
         self.declare_parameter("robot", "PandaOmron")
@@ -53,17 +51,16 @@ class SceneLoader(Node):
         self.action_low = None
         self.action_high = None
         self.current_action = None
+        self.grasp_state = 0.0
 
-        # ROS publishers and services
-        # Publish joint states at a fixed rate
         self.joint_state_pub = self.create_publisher(JointState, "/joint_states", 10)
-        # Service to set action values
-        self.set_action_srv = self.create_service(
-            SetAction,
-            "/set_action",
-            self._set_action_cb,
+
+        self.set_delta_srv = self.create_service(
+            SetDeltaAction,
+            "/set_delta_action",
+            self._set_delta_action_cb,
         )
-        # Service to reset the environment
+
         self.reset_env_srv = self.create_service(
             Trigger,
             "/reset_env",
@@ -127,11 +124,12 @@ class SceneLoader(Node):
         install_enclosing_wall_hotkeys(self.env)
         self.env.reset()
 
-
     def _reset_env_cb(self, request, response):
         try:
             self.env.reset()
             self._set_layout_style()
+            self.current_action = np.zeros_like(self.current_action)
+            self.grasp_state = 0.0
             response.success = True
             response.message = "Environment reset successfully"
             self.get_logger().info(response.message)
@@ -201,21 +199,37 @@ class SceneLoader(Node):
         self.current_action = np.zeros_like(self.action_low)
         self.get_logger().info(f"Action dimension: {len(self.current_action)}")
 
-    def _set_action_cb(self, request, response):
-        idx = int(request.index)
-        value = float(request.value)
-
-        if idx < 0 or idx >= len(self.current_action):
-            response.success = False
-            response.message = f"Index {idx} out of range [0, {len(self.current_action)-1}]"
-            self.get_logger().warn(response.message)
+    def _set_delta_action_cb(self, request, response):
+        if request.reset:
+            self.env.reset()
+            self.current_action = np.zeros_like(self.current_action)
+            self.grasp_state = 0.0
+            response.success = True
+            response.message = "Reset aplicado"
             return response
 
-        clipped_value = float(np.clip(value, self.action_low[idx], self.action_high[idx]))
-        self.current_action[idx] = clipped_value
+        action = np.zeros_like(self.current_action)
+
+        if len(action) >= 3:
+            action[0] = request.dx
+            action[1] = request.dy
+            action[2] = request.dz
+
+        if len(action) >= 6:
+            action[3] = request.droll
+            action[4] = request.dpitch
+            action[5] = request.dyaw
+
+        if request.grasp:
+            self.grasp_state = -1.0 if self.grasp_state > 0.0 else 1.0
+
+        if len(action) >= 7:
+            action[6] = self.grasp_state
+
+        self.current_action = np.clip(action, self.action_low, self.action_high)
 
         response.success = True
-        response.message = f"action[{idx}] = {clipped_value}"
+        response.message = f"Delta aplicado: {self.current_action.tolist()}"
         self.get_logger().info(response.message)
         return response
 
@@ -234,6 +248,9 @@ class SceneLoader(Node):
             self.env.step(self.current_action)
             self._publish_joint_states()
             self.env.render()
+            self.current_action = np.zeros_like(self.current_action)
+            if len(self.current_action) >= 7:
+                self.current_action[6] = self.grasp_state
         except Exception as e:
             self.get_logger().error(f"Render / control failed: {e}")
             self.destroy_node()
