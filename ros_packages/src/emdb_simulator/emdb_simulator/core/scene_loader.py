@@ -43,6 +43,7 @@ class SceneLoader(Node):
         self.styles = self._build_styles()
         self.env = None
         self.robot_model = None
+        self.base_mode = False
 
         self.robot_joint_names = []
         self.robot_qpos_idx = []
@@ -200,6 +201,9 @@ class SceneLoader(Node):
         self.get_logger().info(f"Action dimension: {len(self.current_action)}")
 
     def _set_delta_action_cb(self, request, response):
+        if request.toggle_base_mode:
+            self.base_mode = not self.base_mode
+
         if request.reset:
             self.env.reset()
             self.current_action = np.zeros_like(self.current_action)
@@ -210,6 +214,7 @@ class SceneLoader(Node):
 
         action = np.zeros_like(self.current_action)
 
+        # Brazo
         if len(action) >= 3:
             action[0] = request.dx
             action[1] = request.dy
@@ -220,19 +225,29 @@ class SceneLoader(Node):
             action[4] = request.dpitch
             action[5] = request.dyaw
 
+        # Gripper
         if request.grasp:
             self.grasp_state = -1.0 if self.grasp_state > 0.0 else 1.0
-
         if len(action) >= 7:
             action[6] = self.grasp_state
+
+        # Base móvil, ejemplo
+        if len(action) >= 10:
+            action[7] = request.base_dx
+            action[8] = request.base_dy
+            action[9] = request.base_dyaw
 
         self.current_action = np.clip(action, self.action_low, self.action_high)
 
         response.success = True
-        response.message = f"Delta aplicado: {self.current_action.tolist()}"
+        response.message = (
+            f"Delta aplicado | base_mode={self.base_mode} | "
+            f"action={self.current_action.tolist()}"
+        )
         self.get_logger().info(response.message)
         return response
-
+    
+    
     def _publish_joint_states(self):
         sim = self.env.sim
         msg = JointState()
