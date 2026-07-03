@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import json
+from copy import deepcopy
 from collections import OrderedDict
+import traceback
 
 import numpy as np
 import rclpy
@@ -17,6 +19,7 @@ from robocasa.wrappers.enclosing_wall_render_wrapper import (
 )
 
 from emdb_interfaces.srv import SetDeltaAction
+from emdb_simulator.core.ros_keyboard_device import ROSKeyboardDevice
 
 
 class SceneLoader(Node):
@@ -29,7 +32,7 @@ class SceneLoader(Node):
         self.declare_parameter("style_id", 1)
         self.declare_parameter("show_walls", False)
         self.declare_parameter("renderer", "mjviewer")
-        self.declare_parameter("publish_rate", 30.0)
+        self.declare_parameter("publish_rate", 20.0)
 
         self.task = self.get_parameter("task").value
         self.robot = self.get_parameter("robot").value
@@ -43,16 +46,14 @@ class SceneLoader(Node):
         self.styles = self._build_styles()
         self.env = None
         self.robot_model = None
-        self.base_mode = False
 
         self.robot_joint_names = []
         self.robot_qpos_idx = []
         self.robot_qvel_idx = []
 
-        self.action_low = None
-        self.action_high = None
-        self.current_action = None
-        self.grasp_state = 0.0
+        self.device = None
+        self.all_prev_gripper_actions = None
+        self.mirror_actions = True
 
         self.joint_state_pub = self.create_publisher(JointState, "/joint_states", 10)
 
@@ -71,7 +72,7 @@ class SceneLoader(Node):
         self._create_env()
         self._set_layout_style()
         self._init_robot_joint_mapping()
-        self._init_action_interface()
+        self._init_device()
 
         self.get_logger().info(
             f"Scene loaded -> layout={self.current_layout}, style={self.current_style}"
@@ -116,6 +117,7 @@ class SceneLoader(Node):
             render_camera=None,
             ignore_done=True,
             use_camera_obs=False,
+            control_freq=int(self.publish_rate),
             renderer=self.renderer,
         )
 
@@ -124,21 +126,6 @@ class SceneLoader(Node):
         )
         install_enclosing_wall_hotkeys(self.env)
         self.env.reset()
-
-    def _reset_env_cb(self, request, response):
-        try:
-            self.env.reset()
-            self._set_layout_style()
-            self.current_action = np.zeros_like(self.current_action)
-            self.grasp_state = 0.0
-            response.success = True
-            response.message = "Environment reset successfully"
-            self.get_logger().info(response.message)
-        except Exception as e:
-            response.success = False
-            response.message = f"Failed to reset environment: {e}"
-            self.get_logger().error(response.message)
-        return response
 
     def _set_layout_style(self):
         layout = self.layout_id
@@ -191,63 +178,86 @@ class SceneLoader(Node):
         if len(self.robot_joint_names) == 0:
             raise RuntimeError("No valid 1-DoF robot joints found")
 
-        self.get_logger().info(f"Joint mapping initialized with {len(self.robot_joint_names)} joints")
+        self.get_logger().info(
+            f"Joint mapping initialized with {len(self.robot_joint_names)} joints"
+        )
 
-    def _init_action_interface(self):
-        low, high = self.env.action_spec
-        self.action_low = np.asarray(low, dtype=np.float64)
-        self.action_high = np.asarray(high, dtype=np.float64)
-        self.current_action = np.zeros_like(self.action_low)
-        self.get_logger().info(f"Action dimension: {len(self.current_action)}")
+    def _init_device(self):
+        self.device = ROSKeyboardDevice(
+            env=self.env,
+            pos_sensitivity=1.0,
+            rot_sensitivity=1.0,
+        )
+        self.device.start_control()
+
+        self.all_prev_gripper_actions = [
+            {
+                f"{robot_arm}_gripper": np.repeat([0], robot.gripper[robot_arm].dof)
+                for robot_arm in robot.arms
+                if robot.gripper[robot_arm].dof > 0
+            }
+            for robot in self.env.robots
+        ]
+
+    def _reset_env_cb(self, request, response):
+        try:
+            self.env.reset()
+            self._set_layout_style()
+            self.device.start_control()
+            self._init_device()
+            response.success = True
+            response.message = "Environment reset successfully"
+            self.get_logger().info(response.message)
+        except Exception as e:
+            response.success = False
+            response.message = f"Failed to reset environment: {e}"
+            self.get_logger().error(response.message)
+        return response
 
     def _set_delta_action_cb(self, request, response):
         if request.toggle_base_mode:
-            self.base_mode = not self.base_mode
+            self.device.toggle_base_mode()
+
+        if request.grasp:
+            self.device.toggle_grasp()
 
         if request.reset:
-            self.env.reset()
-            self.current_action = np.zeros_like(self.current_action)
-            self.grasp_state = 0.0
+            self.device.trigger_reset()
             response.success = True
-            response.message = "Reset aplicado"
+            response.message = "Reset solicitado"
             return response
 
-        action = np.zeros_like(self.current_action)
+        if hasattr(request, "next_arm") and request.next_arm:
+            self.device.next_arm()
 
-        # Brazo
-        if len(action) >= 3:
-            action[0] = request.dx
-            action[1] = request.dy
-            action[2] = request.dz
+        if hasattr(request, "next_robot") and request.next_robot:
+            self.device.next_robot()
 
-        if len(action) >= 6:
-            action[3] = request.droll
-            action[4] = request.dpitch
-            action[5] = request.dyaw
-
-        # Gripper
-        if request.grasp:
-            self.grasp_state = -1.0 if self.grasp_state > 0.0 else 1.0
-        if len(action) >= 7:
-            action[6] = self.grasp_state
-
-        # Base móvil, ejemplo
-        if len(action) >= 10:
-            action[7] = request.base_dx
-            action[8] = request.base_dy
-            action[9] = request.base_dyaw
-
-        self.current_action = np.clip(action, self.action_low, self.action_high)
+        if self.device.base_mode:
+            self.device.apply_delta(
+                dx=request.base_dx,
+                dy=request.base_dy,
+                dyaw=request.base_dyaw,
+            )
+        else:
+            self.device.apply_delta(
+                dx=request.dx,
+                dy=request.dy,
+                dz=request.dz,
+                droll=request.droll,
+                dpitch=request.dpitch,
+                dyaw=request.dyaw,
+            )
 
         response.success = True
         response.message = (
-            f"Delta aplicado | base_mode={self.base_mode} | "
-            f"action={self.current_action.tolist()}"
+            f"Delta recibido | robot={self.device.active_robot} "
+            f"arm={self.device.active_arm} "
+            f"base_mode={int(self.device.base_mode)} "
+            f"grasp={int(self.device.grasp)}"
         )
-        self.get_logger().info(response.message)
         return response
-    
-    
+
     def _publish_joint_states(self):
         sim = self.env.sim
         msg = JointState()
@@ -260,14 +270,53 @@ class SceneLoader(Node):
 
     def _render_loop(self):
         try:
-            self.env.step(self.current_action)
+            active_robot = self.env.robots[self.device.active_robot]
+            input_ac_dict = self.device.input2action(mirror_actions=self.mirror_actions)
+            self.get_logger().debug(f"input_ac_dict={input_ac_dict}")
+
+            if input_ac_dict is None:
+                self.env.reset()
+                self.device.start_control()
+                self.device.clear_reset()
+                return
+
+            action_dict = deepcopy(input_ac_dict)
+
+            for arm in active_robot.arms:
+                controller_input_type = active_robot.part_controllers[arm].input_type
+                if controller_input_type == "delta":
+                    action_dict[arm] = input_ac_dict[f"{arm}_delta"]
+                elif controller_input_type == "absolute":
+                    action_dict[arm] = input_ac_dict[f"{arm}_abs"]
+                else:
+                    raise ValueError(f"Unsupported input_type: {controller_input_type}")
+
+            env_action = [
+                robot.create_action_vector(self.all_prev_gripper_actions[i])
+                for i, robot in enumerate(self.env.robots)
+            ]
+
+            env_action[self.device.active_robot] = active_robot.create_action_vector(action_dict)
+
+            for arm in active_robot.arms:
+                key = f"{arm}_gripper"
+                if key in action_dict:
+                    self.all_prev_gripper_actions[self.device.active_robot][key] = action_dict[key]
+
+            env_action = np.concatenate(env_action)
+
+            self.env.step(env_action)
             self._publish_joint_states()
             self.env.render()
-            self.current_action = np.zeros_like(self.current_action)
-            if len(self.current_action) >= 7:
-                self.current_action[6] = self.grasp_state
+
+            if self.device._reset_state:
+                self.env.reset()
+                self.device.start_control()
+                self.device.clear_reset()
+
         except Exception as e:
             self.get_logger().error(f"Render / control failed: {e}")
+            self.get_logger().error(traceback.format_exc())
             self.destroy_node()
             rclpy.shutdown()
 

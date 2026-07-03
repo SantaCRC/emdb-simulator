@@ -4,12 +4,16 @@ float64 dz
 float64 droll
 float64 dpitch
 float64 dyaw
+
 float64 base_dx
 float64 base_dy
 float64 base_dyaw
+
 int32 grasp
 int32 reset
 int32 toggle_base_mode
+int32 next_arm
+int32 next_robot
 ---
 bool success
 string message

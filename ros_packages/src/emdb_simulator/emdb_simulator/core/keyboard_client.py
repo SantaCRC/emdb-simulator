@@ -36,7 +36,8 @@ class KeyboardDeltaClient(Node):
         dx=0.0, dy=0.0, dz=0.0,
         droll=0.0, dpitch=0.0, dyaw=0.0,
         base_dx=0.0, base_dy=0.0, base_dyaw=0.0,
-        grasp=0, reset=0, toggle_base_mode=0
+        grasp=0, reset=0, toggle_base_mode=0,
+        next_arm=0, next_robot=0
     ):
         req = SetDeltaAction.Request()
         req.dx = dx
@@ -51,6 +52,8 @@ class KeyboardDeltaClient(Node):
         req.grasp = grasp
         req.reset = reset
         req.toggle_base_mode = toggle_base_mode
+        req.next_arm = next_arm
+        req.next_robot = next_robot
 
         future = self.cli.call_async(req)
         future.add_done_callback(self.response_callback)
@@ -117,6 +120,10 @@ class KeyboardDeltaClient(Node):
                 self.send_delta(toggle_base_mode=1)
                 mode = 'BASE' if self.base_mode else 'BRAZO'
                 self.get_logger().info(f'Modo cambiado a: {mode}')
+            elif key.char == 's':
+                self.send_delta(next_arm=1)
+            elif key.char == '=':
+                self.send_delta(next_robot=1)
         except AttributeError:
             pass
 
