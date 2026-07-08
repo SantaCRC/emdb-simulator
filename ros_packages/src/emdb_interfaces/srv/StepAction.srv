@@ -1,0 +1,22 @@
+# emdb_interfaces/srv/StepAction.srv
+# Synchronous RL step call. Blocks until the sim has stepped physics once and
+# published the matching Observation/StepInfo on /observations and /reward.
+float64 dx
+float64 dy
+float64 dz
+float64 droll
+float64 dpitch
+float64 dyaw
+
+float64 base_dx
+float64 base_dy
+float64 base_dyaw
+
+int32 grasp
+int32 next_arm
+int32 next_robot
+---
+bool success
+string message
+uint64 episode_id
+uint64 step_id

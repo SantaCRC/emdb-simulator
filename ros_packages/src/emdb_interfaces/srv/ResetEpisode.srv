@@ -1,0 +1,8 @@
+# emdb_interfaces/srv/ResetEpisode.srv
+# layout_id/style_id: -1 keeps the current value, use scene_registry ids to override.
+int32 layout_id -1
+int32 style_id -1
+---
+bool success
+string message
+uint64 episode_id

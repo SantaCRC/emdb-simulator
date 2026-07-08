@@ -18,21 +18,30 @@ from robocasa.wrappers.enclosing_wall_render_wrapper import (
     install_enclosing_wall_hotkeys,
 )
 
-from emdb_interfaces.srv import SetDeltaAction
+from emdb_interfaces.srv import SetDeltaAction, StepAction, ResetEpisode
 from emdb_simulator.core.ros_keyboard_device import ROSKeyboardDevice
+from emdb_interfaces.msg import (
+    ObjectState,
+    ObjectStateArray,
+    Observation,
+    ObservationEntry,
+    StepInfo,
+)
+
 
 
 class SceneLoader(Node):
     def __init__(self):
         super().__init__("robocasa_rollout_node")
 
-        self.declare_parameter("task", "Kitchen")
+        self.declare_parameter("task", "PickPlaceCounterToCabinet")
         self.declare_parameter("robot", "PandaOmron")
         self.declare_parameter("layout_id", 2)
         self.declare_parameter("style_id", 1)
         self.declare_parameter("show_walls", False)
         self.declare_parameter("renderer", "mjviewer")
         self.declare_parameter("publish_rate", 20.0)
+        self.declare_parameter("control_mode", "teleop")
 
         self.task = self.get_parameter("task").value
         self.robot = self.get_parameter("robot").value
@@ -41,6 +50,10 @@ class SceneLoader(Node):
         self.show_walls = bool(self.get_parameter("show_walls").value)
         self.renderer = self.get_parameter("renderer").value
         self.publish_rate = float(self.get_parameter("publish_rate").value)
+        self.control_mode = self.get_parameter("control_mode").value
+
+        self.episode_id = 0
+        self.step_id = 0
 
         self.layouts = self._build_layouts()
         self.styles = self._build_styles()
@@ -57,6 +70,12 @@ class SceneLoader(Node):
 
         self.joint_state_pub = self.create_publisher(JointState, "/joint_states", 10)
 
+        self.object_state_pub = self.create_publisher(ObjectStateArray, "/object_states", 10)
+
+        self.observation_pub = self.create_publisher(Observation, "/observations", 10)
+
+        self.step_info_pub = self.create_publisher(StepInfo, "/reward", 10)
+
         self.set_delta_srv = self.create_service(
             SetDeltaAction,
             "/set_delta_action",
@@ -69,6 +88,18 @@ class SceneLoader(Node):
             self._reset_env_cb,
         )
 
+        self.step_action_srv = self.create_service(
+            StepAction,
+            "/step_action",
+            self._step_action_cb,
+        )
+
+        self.reset_episode_srv = self.create_service(
+            ResetEpisode,
+            "/reset_episode",
+            self._reset_episode_cb,
+        )
+
         self._create_env()
         self._set_layout_style()
         self._init_robot_joint_mapping()
@@ -78,7 +109,14 @@ class SceneLoader(Node):
             f"Scene loaded -> layout={self.current_layout}, style={self.current_style}"
         )
 
-        self.timer = self.create_timer(1.0 / self.publish_rate, self._render_loop)
+        if self.control_mode == "teleop":
+            self.timer = self.create_timer(1.0 / self.publish_rate, self._render_loop)
+        else:
+            self.timer = None
+            self.get_logger().info(
+                "control_mode=rl -> periodic render loop disabled; "
+                "physics only advances on /step_action calls"
+            )
 
     def _build_layouts(self):
         raw = dict((item.value, item.name.lower().capitalize()) for item in LayoutType)
@@ -205,6 +243,8 @@ class SceneLoader(Node):
             self._set_layout_style()
             self.device.start_control()
             self._init_device()
+            self.episode_id += 1
+            self.step_id = 0
             response.success = True
             response.message = "Environment reset successfully"
             self.get_logger().info(response.message)
@@ -258,6 +298,170 @@ class SceneLoader(Node):
         )
         return response
 
+    def _build_env_action(self, active_robot, input_ac_dict):
+        action_dict = deepcopy(input_ac_dict)
+
+        for arm in active_robot.arms:
+            controller_input_type = active_robot.part_controllers[arm].input_type
+            if controller_input_type == "delta":
+                action_dict[arm] = input_ac_dict[f"{arm}_delta"]
+            elif controller_input_type == "absolute":
+                action_dict[arm] = input_ac_dict[f"{arm}_abs"]
+            else:
+                raise ValueError(f"Unsupported input_type: {controller_input_type}")
+
+        env_action = [
+            robot.create_action_vector(self.all_prev_gripper_actions[i])
+            for i, robot in enumerate(self.env.robots)
+        ]
+        env_action[self.device.active_robot] = active_robot.create_action_vector(action_dict)
+
+        for arm in active_robot.arms:
+            key = f"{arm}_gripper"
+            if key in action_dict:
+                self.all_prev_gripper_actions[self.device.active_robot][key] = action_dict[key]
+
+        return np.concatenate(env_action)
+
+    def _translate_delta_to_env_action(self, request):
+        if request.next_arm:
+            self.device.next_arm()
+
+        if request.next_robot:
+            self.device.next_robot()
+
+        if request.grasp:
+            self.device.toggle_grasp()
+
+        if self.device.base_mode:
+            self.device.apply_delta(
+                dx=request.base_dx,
+                dy=request.base_dy,
+                dyaw=request.base_dyaw,
+            )
+        else:
+            self.device.apply_delta(
+                dx=request.dx,
+                dy=request.dy,
+                dz=request.dz,
+                droll=request.droll,
+                dpitch=request.dpitch,
+                dyaw=request.dyaw,
+            )
+
+        active_robot = self.env.robots[self.device.active_robot]
+        input_ac_dict = self.device.input2action(mirror_actions=self.mirror_actions)
+        if input_ac_dict is None:
+            raise RuntimeError(
+                "device.input2action() returned None (reset pending) during an RL step"
+            )
+
+        return self._build_env_action(active_robot, input_ac_dict)
+
+    def _publish_observation(self, obs_dict):
+        msg = Observation()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = "world"
+        msg.episode_id = self.episode_id
+        msg.step_id = self.step_id
+
+        entries = []
+        for key, value in obs_dict.items():
+            arr = np.asarray(value)
+            if not np.issubdtype(arr.dtype, np.number):
+                continue
+            entry = ObservationEntry()
+            entry.key = key
+            entry.data = arr.astype(np.float64).flatten().tolist()
+            entry.shape = [int(d) for d in arr.shape]
+            entries.append(entry)
+
+        msg.entries = entries
+        self.observation_pub.publish(msg)
+
+    def _publish_step_info(self, reward, terminated, truncated, success):
+        msg = StepInfo()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.episode_id = self.episode_id
+        msg.step_id = self.step_id
+        msg.reward = float(reward)
+        msg.terminated = bool(terminated)
+        msg.truncated = bool(truncated)
+        msg.success = bool(success)
+        self.step_info_pub.publish(msg)
+
+    def _step_action_cb(self, request, response):
+        if self.control_mode != "rl":
+            response.success = False
+            response.message = "control_mode is 'teleop'; /step_action is only available in 'rl' mode"
+            response.episode_id = self.episode_id
+            response.step_id = self.step_id
+            return response
+
+        try:
+            env_action = self._translate_delta_to_env_action(request)
+            obs, reward, _done, _info = self.env.step(env_action)
+            success = bool(self.env._check_success())
+            self.step_id += 1
+
+            self._publish_joint_states()
+            self._publish_object_states()
+            self._publish_observation(obs)
+            self._publish_step_info(reward, terminated=success, truncated=False, success=success)
+            self.env.render()
+
+            response.success = True
+            response.message = "ok"
+        except Exception as e:
+            self.get_logger().error(f"/step_action failed: {e}")
+            self.get_logger().error(traceback.format_exc())
+            response.success = False
+            response.message = f"Step failed: {e}"
+
+        response.episode_id = self.episode_id
+        response.step_id = self.step_id
+        return response
+
+    def _reset_episode_cb(self, request, response):
+        try:
+            if request.layout_id != -1:
+                self.layout_id = int(request.layout_id)
+            if request.style_id != -1:
+                self.style_id = int(request.style_id)
+
+            self._set_layout_style()
+            obs = self.env.reset()
+            self.device.start_control()
+            self.all_prev_gripper_actions = [
+                {
+                    f"{robot_arm}_gripper": np.repeat([0], robot.gripper[robot_arm].dof)
+                    for robot_arm in robot.arms
+                    if robot.gripper[robot_arm].dof > 0
+                }
+                for robot in self.env.robots
+            ]
+
+            self.episode_id += 1
+            self.step_id = 0
+
+            self._publish_joint_states()
+            self._publish_object_states()
+            self._publish_observation(obs)
+            self._publish_step_info(reward=0.0, terminated=False, truncated=False, success=False)
+
+            response.success = True
+            response.message = (
+                f"Episode reset -> layout={self.current_layout}, style={self.current_style}"
+            )
+        except Exception as e:
+            self.get_logger().error(f"/reset_episode failed: {e}")
+            self.get_logger().error(traceback.format_exc())
+            response.success = False
+            response.message = f"Reset failed: {e}"
+
+        response.episode_id = self.episode_id
+        return response
+
     def _publish_joint_states(self):
         sim = self.env.sim
         msg = JointState()
@@ -268,51 +472,77 @@ class SceneLoader(Node):
         msg.effort = []
         self.joint_state_pub.publish(msg)
 
+    def _publish_object_states(self):
+        sim = self.env.sim
+        msg = ObjectStateArray()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = "world"
+        msg.objects = []
+
+        for i in range(sim.model.njnt):
+            name = sim.model.joint_id2name(i)
+            if not name or ("obj" not in name and "distr" not in name):
+                continue
+
+            qpos_addr = sim.model.get_joint_qpos_addr(name)
+            if isinstance(qpos_addr, tuple):
+                qpos = sim.data.get_joint_qpos(name)
+
+                obj = ObjectState()
+                obj.name = name
+                obj.pose.position.x = float(qpos[0])
+                obj.pose.position.y = float(qpos[1])
+                obj.pose.position.z = float(qpos[2])
+                obj.pose.orientation.w = float(qpos[3])
+                obj.pose.orientation.x = float(qpos[4])
+                obj.pose.orientation.y = float(qpos[5])
+                obj.pose.orientation.z = float(qpos[6])
+
+                msg.objects.append(obj)
+
+        self.object_state_pub.publish(msg)
+
+
     def _render_loop(self):
         try:
             active_robot = self.env.robots[self.device.active_robot]
             input_ac_dict = self.device.input2action(mirror_actions=self.mirror_actions)
             self.get_logger().debug(f"input_ac_dict={input_ac_dict}")
+            sim_model = self.env.sim.model
+            for i in range(sim_model.njnt):
+                name = sim_model.joint_id2name(i)
+                if name and ("obj" in name or "distr" in name):
+                    self.get_logger().debug(f"Joint {i}: {name}")
+            if self.env._check_success():
+                self.get_logger().info("Success achieved!")
+                # Update success metrics
 
             if input_ac_dict is None:
                 self.env.reset()
                 self.device.start_control()
                 self.device.clear_reset()
+                self.episode_id += 1
+                self.step_id = 0
                 return
 
-            action_dict = deepcopy(input_ac_dict)
+            env_action = self._build_env_action(active_robot, input_ac_dict)
 
-            for arm in active_robot.arms:
-                controller_input_type = active_robot.part_controllers[arm].input_type
-                if controller_input_type == "delta":
-                    action_dict[arm] = input_ac_dict[f"{arm}_delta"]
-                elif controller_input_type == "absolute":
-                    action_dict[arm] = input_ac_dict[f"{arm}_abs"]
-                else:
-                    raise ValueError(f"Unsupported input_type: {controller_input_type}")
+            obs, reward, _done, _info = self.env.step(env_action)
+            success = bool(self.env._check_success())
+            self.step_id += 1
 
-            env_action = [
-                robot.create_action_vector(self.all_prev_gripper_actions[i])
-                for i, robot in enumerate(self.env.robots)
-            ]
-
-            env_action[self.device.active_robot] = active_robot.create_action_vector(action_dict)
-
-            for arm in active_robot.arms:
-                key = f"{arm}_gripper"
-                if key in action_dict:
-                    self.all_prev_gripper_actions[self.device.active_robot][key] = action_dict[key]
-
-            env_action = np.concatenate(env_action)
-
-            self.env.step(env_action)
             self._publish_joint_states()
+            self._publish_object_states()
+            self._publish_observation(obs)
+            self._publish_step_info(reward, terminated=success, truncated=False, success=success)
             self.env.render()
 
             if self.device._reset_state:
                 self.env.reset()
                 self.device.start_control()
                 self.device.clear_reset()
+                self.episode_id += 1
+                self.step_id = 0
 
         except Exception as e:
             self.get_logger().error(f"Render / control failed: {e}")
