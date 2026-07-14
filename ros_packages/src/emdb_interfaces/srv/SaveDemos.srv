@@ -1,0 +1,8 @@
+# emdb_interfaces/srv/SaveDemos.srv
+# Consolidate recorded teleop episodes (collect_demos:=true) into a
+# robomimic/mimicgen-compatible demo.hdf5. Only successful episodes are kept.
+string out_dir
+---
+bool success
+string message
+string hdf5_path

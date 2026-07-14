@@ -13,6 +13,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/StepAction.srv"
   "srv/StepActionRaw.srv"
   "srv/ResetEpisode.srv"
+  "srv/SaveDemos.srv"
   "msg/ObjectState.msg"
   "msg/ObjectStateArray.msg"
   "msg/ObservationEntry.msg"

@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 import json
+import os
+import time
 from copy import deepcopy
 from collections import OrderedDict
+from glob import glob
 import traceback
 
 import numpy as np
@@ -17,8 +20,17 @@ from robocasa.wrappers.enclosing_wall_render_wrapper import (
     EnclosingWallRenderWrapper,
     install_enclosing_wall_hotkeys,
 )
+from robosuite.wrappers import DataCollectionWrapper
+from robocasa.scripts.collect_demos import gather_demonstrations_as_hdf5
+from robocasa.utils.robomimic.robomimic_dataset_utils import convert_to_robomimic_format
 
-from emdb_interfaces.srv import SetDeltaAction, StepAction, StepActionRaw, ResetEpisode
+from emdb_interfaces.srv import (
+    SetDeltaAction,
+    StepAction,
+    StepActionRaw,
+    ResetEpisode,
+    SaveDemos,
+)
 from emdb_simulator.core.ros_keyboard_device import ROSKeyboardDevice
 from emdb_interfaces.msg import (
     ObjectState,
@@ -36,12 +48,18 @@ class SceneLoader(Node):
 
         self.declare_parameter("task", "PickPlaceCounterToCabinet")
         self.declare_parameter("robot", "PandaOmron")
-        self.declare_parameter("layout_id", 2)
-        self.declare_parameter("style_id", 1)
+        # layout_id 2 (and every "test" layout, 1-10) places an open_cabinet
+        # fixture that PickPlaceCounterToCabinet can pick as its target "cab",
+        # which MimicGen's cabinet geom lookup (assumes a boxed cabinet) can't
+        # handle. "train" layouts 11-60 were checked and never include one.
+        self.declare_parameter("layout_id", 11)
+        self.declare_parameter("style_id", 11)
         self.declare_parameter("show_walls", False)
         self.declare_parameter("renderer", "mjviewer")
         self.declare_parameter("publish_rate", 20.0)
         self.declare_parameter("control_mode", "teleop")
+        self.declare_parameter("collect_demos", False)
+        self.declare_parameter("demo_dir", "/tmp/emdb_demos")
 
         self.task = self.get_parameter("task").value
         self.robot = self.get_parameter("robot").value
@@ -51,6 +69,10 @@ class SceneLoader(Node):
         self.renderer = self.get_parameter("renderer").value
         self.publish_rate = float(self.get_parameter("publish_rate").value)
         self.control_mode = self.get_parameter("control_mode").value
+        self.collect_demos = bool(self.get_parameter("collect_demos").value)
+        self.demo_dir = self.get_parameter("demo_dir").value
+        self.demo_tmp_directory = None
+        self.env_info = None
 
         self.episode_id = 0
         self.step_id = 0
@@ -104,6 +126,12 @@ class SceneLoader(Node):
             ResetEpisode,
             "/reset_episode",
             self._reset_episode_cb,
+        )
+
+        self.save_demos_srv = self.create_service(
+            SaveDemos,
+            "/save_demos",
+            self._save_demos_cb,
         )
 
         self._create_env()
@@ -169,6 +197,18 @@ class SceneLoader(Node):
             self.env, alpha=0.1, enabled=not self.show_walls
         )
         install_enclosing_wall_hotkeys(self.env)
+
+        self.env_info = json.dumps(config)
+        if self.collect_demos:
+            t1, t2 = str(time.time()).split(".")
+            self.demo_tmp_directory = f"/tmp/emdb_demo_raw_{t1}_{t2}"
+            self.env = DataCollectionWrapper(
+                self.env, self.demo_tmp_directory, use_env_xml_for_reset=True
+            )
+            self.get_logger().info(
+                f"collect_demos=true -> recording teleop episodes to {self.demo_tmp_directory}"
+            )
+
         self.env.reset()
 
     def _set_layout_style(self):
@@ -493,6 +533,61 @@ class SceneLoader(Node):
             response.message = f"Reset failed: {e}"
 
         response.episode_id = self.episode_id
+        return response
+
+    def _find_successful_episodes(self, directory):
+        successful = []
+        for ep_directory in os.listdir(directory):
+            state_paths = os.path.join(directory, ep_directory, "state_*.npz")
+            success = False
+            for state_file in sorted(glob(state_paths)):
+                dic = np.load(state_file, allow_pickle=True)
+                success = success or bool(dic["successful"])
+            if success:
+                successful.append(ep_directory)
+        return successful
+
+    def _save_demos_cb(self, request, response):
+        if not self.collect_demos:
+            response.success = False
+            response.message = "collect_demos param is false; no episodes are being recorded"
+            response.hdf5_path = ""
+            return response
+
+        try:
+            out_dir = request.out_dir if request.out_dir else self.demo_dir
+            os.makedirs(out_dir, exist_ok=True)
+
+            successful_episodes = self._find_successful_episodes(self.demo_tmp_directory)
+            hdf5_path = gather_demonstrations_as_hdf5(
+                self.demo_tmp_directory,
+                out_dir,
+                self.env_info,
+                successful_episodes=successful_episodes,
+                verbose=True,
+            )
+
+            if hdf5_path is None:
+                response.success = False
+                response.message = "No successful episodes recorded yet"
+                response.hdf5_path = ""
+                return response
+
+            convert_to_robomimic_format(hdf5_path)
+
+            response.success = True
+            response.message = (
+                f"Saved {len(successful_episodes)} successful demo(s) to {hdf5_path}"
+            )
+            response.hdf5_path = hdf5_path
+            self.get_logger().info(response.message)
+        except Exception as e:
+            self.get_logger().error(f"/save_demos failed: {e}")
+            self.get_logger().error(traceback.format_exc())
+            response.success = False
+            response.message = f"Failed to save demos: {e}"
+            response.hdf5_path = ""
+
         return response
 
     def _publish_joint_states(self):
