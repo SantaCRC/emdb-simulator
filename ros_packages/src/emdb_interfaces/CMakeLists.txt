@@ -11,6 +11,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/SetPosition.srv"
   "srv/SetDeltaAction.srv"
   "srv/StepAction.srv"
+  "srv/StepActionRaw.srv"
   "srv/ResetEpisode.srv"
   "msg/ObjectState.msg"
   "msg/ObjectStateArray.msg"

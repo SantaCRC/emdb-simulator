@@ -18,7 +18,7 @@ from robocasa.wrappers.enclosing_wall_render_wrapper import (
     install_enclosing_wall_hotkeys,
 )
 
-from emdb_interfaces.srv import SetDeltaAction, StepAction, ResetEpisode
+from emdb_interfaces.srv import SetDeltaAction, StepAction, StepActionRaw, ResetEpisode
 from emdb_simulator.core.ros_keyboard_device import ROSKeyboardDevice
 from emdb_interfaces.msg import (
     ObjectState,
@@ -92,6 +92,12 @@ class SceneLoader(Node):
             StepAction,
             "/step_action",
             self._step_action_cb,
+        )
+
+        self.step_action_raw_srv = self.create_service(
+            StepActionRaw,
+            "/step_action_raw",
+            self._step_action_raw_cb,
         )
 
         self.reset_episode_srv = self.create_service(
@@ -390,6 +396,17 @@ class SceneLoader(Node):
         msg.success = bool(success)
         self.step_info_pub.publish(msg)
 
+    def _apply_env_action_and_publish(self, env_action):
+        obs, reward, _done, _info = self.env.step(env_action)
+        success = bool(self.env._check_success())
+        self.step_id += 1
+
+        self._publish_joint_states()
+        self._publish_object_states()
+        self._publish_observation(obs)
+        self._publish_step_info(reward, terminated=success, truncated=False, success=success)
+        self.env.render()
+
     def _step_action_cb(self, request, response):
         if self.control_mode != "rl":
             response.success = False
@@ -400,20 +417,36 @@ class SceneLoader(Node):
 
         try:
             env_action = self._translate_delta_to_env_action(request)
-            obs, reward, _done, _info = self.env.step(env_action)
-            success = bool(self.env._check_success())
-            self.step_id += 1
-
-            self._publish_joint_states()
-            self._publish_object_states()
-            self._publish_observation(obs)
-            self._publish_step_info(reward, terminated=success, truncated=False, success=success)
-            self.env.render()
-
+            self._apply_env_action_and_publish(env_action)
             response.success = True
             response.message = "ok"
         except Exception as e:
             self.get_logger().error(f"/step_action failed: {e}")
+            self.get_logger().error(traceback.format_exc())
+            response.success = False
+            response.message = f"Step failed: {e}"
+
+        response.episode_id = self.episode_id
+        response.step_id = self.step_id
+        return response
+
+    def _step_action_raw_cb(self, request, response):
+        if self.control_mode != "rl":
+            response.success = False
+            response.message = (
+                "control_mode is 'teleop'; /step_action_raw is only available in 'rl' mode"
+            )
+            response.episode_id = self.episode_id
+            response.step_id = self.step_id
+            return response
+
+        try:
+            env_action = np.asarray(request.action, dtype=np.float64)
+            self._apply_env_action_and_publish(env_action)
+            response.success = True
+            response.message = "ok"
+        except Exception as e:
+            self.get_logger().error(f"/step_action_raw failed: {e}")
             self.get_logger().error(traceback.format_exc())
             response.success = False
             response.message = f"Step failed: {e}"
@@ -526,16 +559,7 @@ class SceneLoader(Node):
                 return
 
             env_action = self._build_env_action(active_robot, input_ac_dict)
-
-            obs, reward, _done, _info = self.env.step(env_action)
-            success = bool(self.env._check_success())
-            self.step_id += 1
-
-            self._publish_joint_states()
-            self._publish_object_states()
-            self._publish_observation(obs)
-            self._publish_step_info(reward, terminated=success, truncated=False, success=success)
-            self.env.render()
+            self._apply_env_action_and_publish(env_action)
 
             if self.device._reset_state:
                 self.env.reset()

@@ -1,0 +1,10 @@
+# emdb_interfaces/srv/StepActionRaw.srv
+# Raw robosuite action vector passthrough (bypasses the teleop delta device
+# translation used by StepAction). For replaying recorded demo actions that
+# are already in the sim's native env.step() action space.
+float64[] action
+---
+bool success
+string message
+uint64 episode_id
+uint64 step_id
