@@ -18,6 +18,7 @@ def generate_launch_description():
                 'video_path': '/tmp/test.mp4',
                 'run_once': True,
                 'render': True,
+                'control_mode': 'teleop',
             }],
         ),
         Node(
