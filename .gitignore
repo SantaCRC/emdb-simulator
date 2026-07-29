@@ -15,3 +15,5 @@ install/
 log/
 *.egg-info
 assets/
+.venv/*
+.venv/
