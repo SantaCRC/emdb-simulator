@@ -18,6 +18,7 @@ class KeyboardDeltaClient(Node):
         self.base_rot_step = 0.2
 
         self.base_mode = False
+        self.shift_pressed = False
 
         self.listener = Listener(on_press=self.on_press, on_release=self.on_release)
         self.listener.start()
@@ -26,7 +27,7 @@ class KeyboardDeltaClient(Node):
 
     def print_controls(self):
         self.get_logger().info('Controles:')
-        self.get_logger().info('Modo brazo: flechas XY, . / ; en Z, e-r / y-h / o-p rotaciones')
+        self.get_logger().info('Modo brazo: flechas XY, Shift+arriba/abajo en Z, e-r / y-h / o-p rotaciones')
         self.get_logger().info('b: alternar modo brazo/base')
         self.get_logger().info('Modo base: flechas mover base, o/p girar base')
         self.get_logger().info('space: grasp, q: reset')
@@ -67,19 +68,25 @@ class KeyboardDeltaClient(Node):
 
     def on_press(self, key):
         try:
+            if key in (Key.shift, Key.shift_l, Key.shift_r):
+                self.shift_pressed = True
+                return
+
             if not self.base_mode:
                 if key == Key.up:
-                    self.send_delta(dx=-self.pos_step)
+                    if self.shift_pressed:
+                        self.send_delta(dz=self.pos_step)
+                    else:
+                        self.send_delta(dx=-self.pos_step)
                 elif key == Key.down:
-                    self.send_delta(dx=self.pos_step)
+                    if self.shift_pressed:
+                        self.send_delta(dz=-self.pos_step)
+                    else:
+                        self.send_delta(dx=self.pos_step)
                 elif key == Key.left:
                     self.send_delta(dy=-self.pos_step)
                 elif key == Key.right:
                     self.send_delta(dy=self.pos_step)
-                elif key.char == '.':
-                    self.send_delta(dz=-self.pos_step)
-                elif key.char == ';':
-                    self.send_delta(dz=self.pos_step)
                 elif key.char == 'e':
                     self.send_delta(droll=self.rot_step)
                 elif key.char == 'r':
@@ -111,7 +118,9 @@ class KeyboardDeltaClient(Node):
 
     def on_release(self, key):
         try:
-            if key == Key.space:
+            if key in (Key.shift, Key.shift_l, Key.shift_r):
+                self.shift_pressed = False
+            elif key == Key.space:
                 self.send_delta(grasp=1)
             elif key.char == 'q':
                 self.send_delta(reset=1)

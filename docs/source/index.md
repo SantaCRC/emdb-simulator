@@ -1,0 +1,37 @@
+# EMDB / TFM Documentation
+
+EMDB is a ROS 2 workspace that wraps [RoboCasa](https://github.com/SantaCRC/robocasa) /
+[robosuite](https://github.com/SantaCRC/robosuite) kitchen-manipulation simulation behind a
+ROS 2 topic/service interface, so that teleoperation, demo recording, and RL
+training/inference can all talk to the simulator without depending on
+robosuite/robocasa/MuJoCo directly.
+
+```{toctree}
+:maxdepth: 2
+:caption: Contents
+
+getting_started
+architecture
+howto/index
+interfaces/index
+api/index
+```
+
+## At a glance
+
+- **{ref}`emdb_simulator`** — owns the MuJoCo/robosuite/RoboCasa
+  environment, steps physics, and publishes observations/joint states/object
+  poses while exposing action services.
+- **{ref}`emdb_policy`** — a separate process that consumes the
+  simulator's ROS interface only; hosts a `gymnasium.Env` wrapper, an SB3 PPO
+  training script, and a demo-replay tool.
+- **[emdb_interfaces](interfaces/index.md)** — the custom `.msg`/`.srv` definitions shared
+  between the two.
+
+## Quick links
+
+- New to the project? Start with {doc}`getting_started`.
+- Want to drive the robot by hand? See {doc}`howto/teleoperation`.
+- Want to train a policy? See {doc}`howto/training_rl`.
+- Looking for a message/service field? See {doc}`interfaces/index`.
+- Looking for a Python function/class? See {doc}`api/index`.

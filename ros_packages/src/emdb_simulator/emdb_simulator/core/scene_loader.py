@@ -15,6 +15,8 @@ from std_srvs.srv import Trigger
 
 import robosuite
 import robocasa
+from robosuite.environments.base import REGISTERED_ENVS
+from robocasa.environments.kitchen.kitchen import Kitchen
 from robocasa.models.scenes.scene_registry import LayoutType, StyleType
 from robocasa.wrappers.enclosing_wall_render_wrapper import (
     EnclosingWallRenderWrapper,
@@ -31,6 +33,7 @@ from emdb_interfaces.srv import (
     ResetEpisode,
     SaveDemos,
 )
+from emdb_simulator.core import robot_loader  # noqa: F401  registers UR5eOmron with robosuite
 from emdb_simulator.core.ros_keyboard_device import ROSKeyboardDevice
 from emdb_interfaces.msg import (
     ObjectState,
@@ -47,7 +50,7 @@ class SceneLoader(Node):
         super().__init__("robocasa_rollout_node")
 
         self.declare_parameter("task", "PickPlaceCounterToCabinet")
-        self.declare_parameter("robot", "PandaOmron")
+        self.declare_parameter("robot", "UR5eOmron")
         # layout_id 2 (and every "test" layout, 1-10) places an open_cabinet
         # fixture that PickPlaceCounterToCabinet can pick as its target "cab",
         # which MimicGen's cabinet geom lookup (assumes a boxed cabinet) can't
@@ -171,15 +174,20 @@ class SceneLoader(Node):
         return ordered
 
     def _create_env(self):
+        self.is_kitchen_task = issubclass(REGISTERED_ENVS[self.task], Kitchen)
+
         config = {
             "env_name": self.task,
             "robots": self.robot,
-            "translucent_robot": False,
-            "layout_ids": [self.layout_id],
-            "style_ids": [self.style_id],
         }
+        if self.is_kitchen_task:
+            config["translucent_robot"] = False
+            config["layout_ids"] = [self.layout_id]
+            config["style_ids"] = [self.style_id]
 
-        self.get_logger().info("Initializing RoboCasa scene...")
+        self.get_logger().info(
+            f"Initializing {'RoboCasa' if self.is_kitchen_task else 'robosuite'} scene..."
+        )
         self.get_logger().info(json.dumps(config))
 
         self.env = robosuite.make(
@@ -193,10 +201,11 @@ class SceneLoader(Node):
             renderer=self.renderer,
         )
 
-        self.env = EnclosingWallRenderWrapper(
-            self.env, alpha=0.1, enabled=not self.show_walls
-        )
-        install_enclosing_wall_hotkeys(self.env)
+        if self.is_kitchen_task:
+            self.env = EnclosingWallRenderWrapper(
+                self.env, alpha=0.1, enabled=not self.show_walls
+            )
+            install_enclosing_wall_hotkeys(self.env)
 
         self.env_info = json.dumps(config)
         if self.collect_demos:
@@ -212,6 +221,11 @@ class SceneLoader(Node):
         self.env.reset()
 
     def _set_layout_style(self):
+        if not self.is_kitchen_task:
+            self.current_layout = None
+            self.current_style = None
+            return
+
         layout = self.layout_id
         style = self.style_id
 
