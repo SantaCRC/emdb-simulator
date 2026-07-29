@@ -45,8 +45,12 @@ if [ -z "${ROS_DISTRO:-}" ] || [ ! -f "/opt/ros/$ROS_DISTRO/setup.bash" ]; then
     exit 1
 fi
 echo "Using ROS 2 distro: $ROS_DISTRO"
+# ROS 2's setup.bash references unset variables (e.g. AMENT_TRACE_SETUP_FILES),
+# which is incompatible with `set -u`; disable it just for the source.
+set +u
 # shellcheck disable=SC1090
 source "/opt/ros/$ROS_DISTRO/setup.bash"
+set -u
 
 # ---------------------------------------------------------------------------
 # 2. Git submodules (misc/robosuite, misc/robocasa, misc/robosuite_models).
@@ -114,7 +118,7 @@ rosdep install --from-paths "$REPO_ROOT/ros_packages/src" --ignore-src -r -y
 log "Building ros_packages workspace..."
 (
     cd "$REPO_ROOT/ros_packages"
-    python -m colcon build --symlink-install
+    colcon build --symlink-install
 )
 
 log "Setup complete."
