@@ -34,6 +34,7 @@ from emdb_interfaces.srv import (
     SaveDemos,
 )
 from emdb_simulator.core import robot_loader  # noqa: F401  registers UR5eOmron with robosuite
+from emdb_simulator.core import kitchen_lift_task  # noqa: F401  registers KitchenLift with robosuite
 from emdb_simulator.core.ros_keyboard_device import ROSKeyboardDevice
 from emdb_interfaces.msg import (
     ObjectState,
@@ -51,11 +52,10 @@ class SceneLoader(Node):
 
         self.declare_parameter("task", "PickPlaceCounterToCabinet")
         self.declare_parameter("robot", "UR5eOmron")
-        # layout_id 2 (and every "test" layout, 1-10) places an open_cabinet
-        # fixture that PickPlaceCounterToCabinet can pick as its target "cab",
-        # which MimicGen's cabinet geom lookup (assumes a boxed cabinet) can't
-        # handle. "train" layouts 11-60 were checked and never include one.
-        self.declare_parameter("layout_id", 11)
+        # layout 12 has a kitchen island (layout 11, the previous default,
+        # is in Kitchen.ISLAND_EXCLUDED_LAYOUTS and has none), which KitchenLift
+        # needs since it spawns the robot and object on the island.
+        self.declare_parameter("layout_id", 12)
         self.declare_parameter("style_id", 11)
         self.declare_parameter("show_walls", False)
         self.declare_parameter("renderer", "mjviewer")

@@ -76,7 +76,12 @@ fi
 # ---------------------------------------------------------------------------
 log "Setting up Python virtualenv at $VENV_DIR ..."
 if [ ! -d "$VENV_DIR" ]; then
-    python3 -m venv "$VENV_DIR"
+    # --system-site-packages: the ROS 2 build toolchain (rosidl's lark parser,
+    # colcon, etc.) is installed system-wide via apt, not pip. Without this,
+    # colcon build fails deep inside rosidl with "No module named 'lark'".
+    # Packages pip-installs into the venv (numpy, robosuite, ...) still take
+    # priority over the system copies.
+    python3 -m venv --system-site-packages "$VENV_DIR"
 fi
 # shellcheck disable=SC1091
 source "$VENV_DIR/bin/activate"
@@ -101,6 +106,15 @@ if [ "$WITH_DOCS" -eq 1 ]; then
     pip install -r "$REPO_ROOT/docs/requirements.txt"
 fi
 
+# colcon must be importable via the venv's python (python -m colcon), so that
+# packages built by it get console-script shebangs pointing at the venv --
+# otherwise built nodes can't import venv-only deps like robosuite.
+log "Installing colcon into the venv..."
+pip install colcon-common-extensions
+# colcon-common-extensions pulls in the latest EmPy (4.x), but ROS 2 Humble's
+# rosidl_adapter only works with the old em 3.3.4 API; pin it back down.
+pip install "empy==3.3.4"
+
 # ---------------------------------------------------------------------------
 # 4. ROS dependencies via rosdep.
 # ---------------------------------------------------------------------------
@@ -118,7 +132,7 @@ rosdep install --from-paths "$REPO_ROOT/ros_packages/src" --ignore-src -r -y
 log "Building ros_packages workspace..."
 (
     cd "$REPO_ROOT/ros_packages"
-    colcon build --symlink-install
+    python -m colcon build --symlink-install
 )
 
 log "Setup complete."
