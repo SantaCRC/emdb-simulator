@@ -1,6 +1,7 @@
 """Sphinx configuration for the EMDB / TFM documentation."""
 import os
 import sys
+import types
 
 # -- Path setup --------------------------------------------------------
 # Make the ament_python packages importable for autodoc without needing a
@@ -10,6 +11,21 @@ DOCS_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.abspath(os.path.join(DOCS_DIR, "..", ".."))
 sys.path.insert(0, os.path.join(REPO_ROOT, "ros_packages", "src", "emdb_policy"))
 sys.path.insert(0, os.path.join(REPO_ROOT, "ros_packages", "src", "emdb_simulator"))
+
+# emdb_simulator.core.gripper_loader calls get_package_share_directory() at
+# module import time and feeds the result straight into os.path.join(), so a
+# generic autodoc_mock_imports entry isn't enough (a bare Mock isn't a valid
+# path-like object). Install a minimal real stub instead, resolving to the
+# package's own source share/ dir, so importing it at doc-build time works
+# without a sourced ROS 2 environment.
+_ament_index_python = types.ModuleType("ament_index_python")
+_ament_index_python_packages = types.ModuleType("ament_index_python.packages")
+_ament_index_python_packages.get_package_share_directory = lambda name: os.path.join(
+    REPO_ROOT, "ros_packages", "src", name
+)
+_ament_index_python.packages = _ament_index_python_packages
+sys.modules.setdefault("ament_index_python", _ament_index_python)
+sys.modules.setdefault("ament_index_python.packages", _ament_index_python_packages)
 
 # -- Project information -------------------------------------------------
 project = "EMDB / TFM"

@@ -12,10 +12,10 @@ emdb_simulator
 ```
 
 ```{note}
-`emdb_simulator.core.scene_visualizer` and `emdb_simulator.core.robot_loader`
-are currently empty placeholder modules, and `emdb_simulator.core.scene_inspector`
-references a `RoboCasaSceneLoader` class that no longer exists in
-`scene_loader.py` (renamed to `SceneLoader`) and isn't registered as a
-console script — all three are excluded from this reference as dead/stale
-code rather than documented as if they worked.
+`emdb_simulator.core.scene_visualizer` is currently an empty placeholder
+module, and `emdb_simulator.core.scene_inspector` references a
+`RoboCasaSceneLoader` class that no longer exists in `scene_loader.py`
+(renamed to `SceneLoader`) and isn't registered as a console script — both
+are excluded from this reference as dead/stale code rather than documented
+as if they worked.
 ```

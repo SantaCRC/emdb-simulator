@@ -41,7 +41,13 @@ Owns the actual RoboCasa/robosuite `env`. The core node is
 `test_scene_loader`, ROS node name `robocasa_rollout_node`), which:
 
 - builds the robosuite `env` from parameters (`task`, `robot`, `layout_id`,
-  `style_id`, `renderer`, ...),
+  `style_id`, `renderer`, ...). Importing `scene_loader` transitively
+  imports {py:mod}`emdb_simulator.core.robot_loader` and
+  {py:mod}`emdb_simulator.core.kitchen_lift_task`, which register the
+  custom robot (`UR5eOmron`) and task (`KitchenLift`) with robosuite as a
+  side effect; `robot_loader` in turn imports
+  {py:mod}`emdb_simulator.core.gripper_loader`, which registers
+  `TwoFG7Gripper` (`UR5eOmron`'s default gripper),
 - runs in one of two mutually exclusive **`control_mode`**s:
   - `teleop` (default): a timer loop at `publish_rate` Hz reads the last
     keyboard-driven delta from `ROSKeyboardDevice`, steps the env, and

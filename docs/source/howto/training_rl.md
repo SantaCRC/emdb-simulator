@@ -13,7 +13,7 @@ robosuite/robocasa/MuJoCo itself — only on the simulator's ROS interface.
 called):
 
 ```bash
-source setup_tfm.sh
+source env.sh
 ros2 run emdb_simulator test_scene_loader --ros-args -p control_mode:=rl
 ```
 

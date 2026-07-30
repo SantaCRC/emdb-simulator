@@ -7,7 +7,7 @@ This drives the simulator's `/set_delta_action` service by hand, using the
 ## 1. Launch simulator + keyboard client
 
 ```bash
-source setup_tfm.sh
+source env.sh
 ros2 launch emdb_simulator test_robocasa.launch.py
 ```
 

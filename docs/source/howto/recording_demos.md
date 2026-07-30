@@ -8,7 +8,7 @@ successful ones into a robomimic-compatible `demo.hdf5`, via robosuite's
 ## 1. Launch with `collect_demos:=true`
 
 ```bash
-source setup_tfm.sh
+source env.sh
 ros2 run emdb_simulator test_scene_loader --ros-args \
   -p control_mode:=teleop \
   -p collect_demos:=true

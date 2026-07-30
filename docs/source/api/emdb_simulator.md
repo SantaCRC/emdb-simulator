@@ -40,6 +40,45 @@ to translate `SetDeltaAction`/`StepAction` deltas into robosuite's
    :show-inheritance:
 ```
 
+## `emdb_simulator.core.robot_loader`
+
+Registers `UR5eOmron` (a UR5e arm on an Omron mobile base) with robosuite as
+an import side effect; imported by `scene_loader`. See {doc}`../architecture`.
+
+```{eval-rst}
+.. automodule:: emdb_simulator.core.robot_loader
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+## `emdb_simulator.core.gripper_loader`
+
+Registers `TwoFG7Gripper` (an OnRobot 2FG7 parallel gripper, `UR5eOmron`'s
+default gripper) with robosuite as an import side effect; imported by
+`robot_loader`. See {doc}`../architecture`.
+
+```{eval-rst}
+.. automodule:: emdb_simulator.core.gripper_loader
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+## `emdb_simulator.core.kitchen_lift_task`
+
+Registers `KitchenLift`, a "lift" task (pick up a counter-top object and
+raise it above a height threshold) that still uses RoboCasa kitchen
+layouts/styles, with robosuite as an import side effect; imported by
+`scene_loader`. See {doc}`../howto/run_simulator` for the `task` parameter.
+
+```{eval-rst}
+.. automodule:: emdb_simulator.core.kitchen_lift_task
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
 ## `emdb_simulator.core.position_server`
 
 Console script: `test_position_server`. Minimal example

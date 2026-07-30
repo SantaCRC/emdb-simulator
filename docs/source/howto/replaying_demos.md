@@ -24,7 +24,7 @@ completes.
 ## 1. Start the simulator in RL mode
 
 ```bash
-source setup_tfm.sh
+source env.sh
 ros2 run emdb_simulator test_scene_loader --ros-args -p control_mode:=rl
 ```
 
