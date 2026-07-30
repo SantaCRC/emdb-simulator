@@ -20,7 +20,20 @@ class KitchenLift(Kitchen):
     LIFT_HEIGHT = 0.10  # meters above starting height counted as "lifted"
     EXCLUDE_LAYOUTS = Kitchen.ISLAND_EXCLUDED_LAYOUTS
 
-    def __init__(self, obj_groups="all", exclude_obj_groups=None, *args, **kwargs):
+    # TwoFG7Gripper (see gripper_loader.py) is a real OnRobot 2FG7 small-parts
+    # gripper: ~31mm max jaw opening. Most RoboCasa "graspable" categories are
+    # full-size kitchen items (an apple's narrowest side is ~54-75mm) that the
+    # jaw physically cannot close around, so the object just sits in the open
+    # gap instead of being gripped. These four categories were verified by
+    # measuring every instance's reg_bbox (restricted to Kitchen's default
+    # obj_registries=("objaverse", "lightwheel") -- categories that only exist
+    # under "aigen", e.g. chili_pepper, are never actually reachable and will
+    # raise during sampling) and then confirmed with real end-to-end grasp
+    # trials: every sampled instance's narrowest dimension stays under the
+    # jaw's mechanical limit with margin, and all lift successfully.
+    DEFAULT_OBJ_GROUPS = ["straw", "peeler", "sugar_cube", "shrimp"]
+
+    def __init__(self, obj_groups=DEFAULT_OBJ_GROUPS, exclude_obj_groups=None, *args, **kwargs):
         self.obj_groups = obj_groups
         self.exclude_obj_groups = exclude_obj_groups
         self._obj_start_z = None
