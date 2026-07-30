@@ -7,3 +7,9 @@
 [submodule "misc/robosuite_models"]
 	path = misc/robosuite_models
 	url = https://github.com/SantaCRC/robosuite_models.git
+[submodule "misc/mimicgen"]
+	path = misc/mimicgen
+	url = https://github.com/NVlabs/mimicgen
+[submodule "misc/robomimic"]
+	path = misc/robomimic
+	url = https://github.com/ARISE-Initiative/robomimic
