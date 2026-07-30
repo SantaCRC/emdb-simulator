@@ -1,4 +1,4 @@
-# EMDB / TFM Documentation
+# EMDB Simulator Documentation
 
 EMDB is a ROS 2 workspace that wraps [RoboCasa](https://github.com/SantaCRC/robocasa) /
 [robosuite](https://github.com/SantaCRC/robosuite) kitchen-manipulation simulation behind a

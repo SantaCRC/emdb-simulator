@@ -1,4 +1,4 @@
-"""Sphinx configuration for the EMDB / TFM documentation."""
+"""Sphinx configuration for the EMDB Simulator documentation."""
 import os
 import sys
 import types
@@ -28,7 +28,7 @@ sys.modules.setdefault("ament_index_python", _ament_index_python)
 sys.modules.setdefault("ament_index_python.packages", _ament_index_python_packages)
 
 # -- Project information -------------------------------------------------
-project = "EMDB / TFM"
+project = "EMDB Simulator"
 author = "Fabian Alvarez"
 copyright = "2026, Fabian Alvarez"
 release = "0.0.0"
@@ -98,4 +98,4 @@ intersphinx_mapping = {
 # -- HTML output ------------------------------------------------------
 html_theme = "furo"
 html_static_path = ["_static"]
-html_title = "EMDB / TFM Docs"
+html_title = "EMDB Simulator"

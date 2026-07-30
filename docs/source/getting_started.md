@@ -3,7 +3,7 @@
 ## Repository layout
 
 ```text
-TFM/
+emdb_simulator/
 ├── misc/                     # git submodules + helper scripts
 │   ├── robosuite/            # SantaCRC/robosuite fork
 │   ├── robocasa/             # SantaCRC/robocasa fork
