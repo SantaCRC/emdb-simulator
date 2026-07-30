@@ -49,6 +49,14 @@ setup(
             os.path.join('share', package_name, 'config', 'objects'),
             glob('config/objects/*.yaml')
         ),
+        (
+            os.path.join('share', package_name, 'assets', 'grippers', 'twofg7_gripper'),
+            glob('assets/grippers/twofg7_gripper/*.xml')
+        ),
+        (
+            os.path.join('share', package_name, 'assets', 'grippers', 'twofg7_gripper', 'meshes', 'twofg7'),
+            glob('assets/grippers/twofg7_gripper/meshes/twofg7/*.stl')
+        ),
     ],
     install_requires=['setuptools'],
     zip_safe=True,

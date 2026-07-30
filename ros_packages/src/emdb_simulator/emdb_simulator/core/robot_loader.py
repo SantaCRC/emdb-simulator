@@ -9,6 +9,8 @@ import numpy as np
 from robosuite.models.robots.manipulators.ur5e_robot import UR5e
 from robosuite.robots import register_robot_class
 
+from emdb_simulator.core import gripper_loader  # noqa: F401  registers TwoFG7Gripper with robosuite
+
 
 @register_robot_class("WheeledRobot")
 class UR5eOmron(UR5e):
@@ -28,9 +30,10 @@ class UR5eOmron(UR5e):
         # finger joints with only a weak spring tendon (stiffness=0.4, no
         # rigid <equality> constraint) in this vendored robosuite asset, so
         # the fingers don't reliably hold together under contact/grasp
-        # forces. PandaGripper is fully actuated (no underactuated linkage)
-        # and already proven reliable with PandaOmron in this project.
-        return {"right": "PandaGripper"}
+        # forces. TwoFG7Gripper (OnRobot 2FG7) is fully actuated (mirrored
+        # slide joints, no underactuated linkage), same actuation pattern as
+        # PandaGripper which this project used previously.
+        return {"right": "TwoFG7Gripper"}
 
     @property
     def init_qpos(self):
