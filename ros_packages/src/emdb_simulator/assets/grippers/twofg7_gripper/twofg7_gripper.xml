@@ -1,0 +1,89 @@
+<mujoco model="twofg7_hand">
+    <!--
+    OnRobot 2FG7 parallel gripper.
+
+    Geometry derived from OnRobot's official 2FG7_v1.STEP CAD file: the assembly
+    was split into a static body (housing, top cover, ISO 9409-1-50-4-M6 mounting
+    flange, connector) and two moving finger groups (slider + bracket + tip
+    screws), then re-expressed in this gripper's local frame with +Z as the
+    approach axis (0 at the mounting-flange face) and +X as the finger-opening
+    axis. Visual meshes keep the CAD surfaces (screws below ~100mm^3 dropped to
+    keep triangle count reasonable); collision meshes are the convex hull of
+    each group, matching how MuJoCo treats mesh geoms for contact anyway.
+
+    The STEP file only captures one static assembly pose, not the mechanism's
+    travel, so that modeled pose is treated as the fully-open position (qpos=0
+    on both finger joints) and the joint range below (19mm per finger, 38mm
+    total) comes from OnRobot's published stroke spec rather than the CAD.
+    Each joint's axis is set so its ctrlrange LOW end is the closed side and
+    HIGH end is the open side for finger_joint1, mirrored for finger_joint2 -
+    this matches the TwoFG7Gripper.format_action direction convention (same
+    as PandaGripper's), and was verified empirically in sim, not by inspection.
+    -->
+    <asset>
+        <mesh name="base_vis" file="meshes/twofg7/base_vis.stl" />
+        <mesh name="base_col" file="meshes/twofg7/base.stl" />
+        <mesh name="left_finger_vis" file="meshes/twofg7/left_finger_vis.stl" />
+        <mesh name="left_finger_col" file="meshes/twofg7/left_finger.stl" />
+        <mesh name="right_finger_vis" file="meshes/twofg7/right_finger_vis.stl" />
+        <mesh name="right_finger_col" file="meshes/twofg7/right_finger.stl" />
+    </asset>
+    <actuator>
+        <position ctrllimited="true" ctrlrange="-0.019 0.0" joint="finger_joint1" kp="1000" name="gripper_finger_joint1" forcelimited="true" forcerange="-70 70"/>
+        <position ctrllimited="true" ctrlrange="0.0 0.019" joint="finger_joint2" kp="1000" name="gripper_finger_joint2" forcelimited="true" forcerange="-70 70"/>
+    </actuator>
+    <worldbody>
+        <body name="right_gripper" pos="0 0 0" quat="0.707107 0 0 -0.707107">
+            <site name="ft_frame" pos="0 0 0" size="0.01 0.01 0.01" rgba="1 0 0 1" type="sphere" group="1"/>
+            <inertial pos="0 0 0.056" quat="1 0 0 0" mass="0.9" diaginertia="0.001402 0.001542 0.001076" />
+            <geom pos="0 0 0" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" group="1" mesh="base_vis" name="hand_visual" rgba="0.2 0.2 0.2 1" />
+            <!-- base_col's convex hull fills in the finger-slider channel that's hollow on the
+            real part, so without contype="0" the sliders permanently interpenetrate the housing
+            at every joint position (verified: constant ~5mm, unaffected by qpos). contype="0"
+            here mirrors finger1_collision/finger2_collision below, which exclude bracket-vs-bracket
+            contact for the same convex-hull-vs-slot reason; conaffinity stays 1 so the housing
+            still collides normally with everything outside this assembly. -->
+            <geom pos="0 0 0" quat="1 0 0 0" type="mesh" mesh="base_col" group="0" contype="0" conaffinity="1" name="hand_collision"/>
+            <body name="eef" pos="0 0 0.150" quat="1 0 0 0">
+                <site name="grip_site" pos="0 0 0" size="0.01 0.01 0.01" rgba="1 0 0 0.5" type="sphere" group="1"/>
+                <site name="ee_x" pos="0.1 0 0" size="0.005 .1" quat="0.707105 0 0.707108 0 " rgba="1 0 0 0" type="cylinder" group="1"/>
+                <site name="ee_y" pos="0 0.1 0" size="0.005 .1" quat="0.707105 0.707108 0 0" rgba="0 1 0 0" type="cylinder" group="1"/>
+                <site name="ee_z" pos="0 0 0.1" size="0.005 .1" quat="1 0 0 0" rgba="0 0 1 0" type="cylinder" group="1"/>
+                <site name="grip_site_cylinder" pos="0 0 0" size="0.005 10" rgba="0 1 0 0.3" type="cylinder" group="1"/>
+            </body>
+            <body name="leftfinger" pos="0 0 0">
+                <inertial pos="-0.023 0 0.131" mass="0.1" diaginertia="0.0000306 0.0000243 0.0000130" />
+                <joint name="finger_joint1" pos="0 0 0" axis="-1 0 0" type="slide" limited="true" range="-0.019 0.0" damping="100" armature="1.0" frictionloss="1.0"/>
+                <geom type="mesh" contype="0" conaffinity="0" group="1" mesh="left_finger_vis" name="finger1_visual" rgba="0.499 0.499 0.499 1" />
+                <geom type="mesh" group="0" conaffinity="1" contype="0" solref="0.02 1" friction="1 0.005 0.0001" condim="4" mesh="left_finger_col" name="finger1_collision"/>
+                <!-- x=-0.0294 (not -0.0127) matches where the finger mesh's own tip actually sits:
+                sampling left_finger_col's vertices in this body's local frame puts the lowest 3mm
+                of the mesh at x=[-32.85,-25.96], centroid x=-29.4mm. The previous -0.0127 put this
+                pad box entirely outside the mesh (0 mesh vertices fall inside its bounds; the mesh
+                at x=-0.0127 only reaches z=117mm, well short of this box's z=125-155mm range), so it
+                was a free-floating collision box, visible as a detached blue box in collision-view
+                renders. -->
+                <body name="finger_joint1_tip" pos="-0.0294 0 0.14">
+                    <inertial pos="0 0 0" quat="0 0 0 1" mass="0.01" diaginertia="0.01 0.01 0.01" />
+                    <geom size="0.004 0.015 0.015" pos="-0.003 0 0" quat="0 0 0 1" type="box" group="0" solref="0.01 0.5" friction="2 0.05 0.0001" conaffinity="1" contype="1" name="finger1_pad_collision"/>
+                </body>
+            </body>
+            <body name="rightfinger" pos="0 0 0">
+                <inertial pos="0.023 0 0.131" mass="0.1" diaginertia="0.0000306 0.0000243 0.0000130" />
+                <joint name="finger_joint2" pos="0 0 0" axis="-1 0 0" type="slide" limited="true" range="0.0 0.019" damping="100" armature="1.0" frictionloss="1.0"/>
+                <geom type="mesh" contype="0" conaffinity="0" group="1" mesh="right_finger_vis" name="finger2_visual" rgba="0.499 0.499 0.499 1" />
+                <geom type="mesh" group="0" conaffinity="1" contype="0" solref="0.02 1" friction="1 0.005 0.0001" condim="4" mesh="right_finger_col" name="finger2_collision"/>
+                <!-- mirrors finger_joint1_tip's fix: x=0.0294 matches right_finger_col's own tip
+                centroid (mirror-symmetric with the left finger, x=+29.4mm), not the old 0.0127. -->
+                <body name="finger_joint2_tip" pos="0.0294 0 0.14">
+                    <inertial pos="0 0 0" quat="0 0 0 1" mass="0.01" diaginertia="0.01 0.01 0.01" />
+                    <geom size="0.004 0.015 0.015" pos="0.003 0 0" quat="0 0 0 1" type="box" group="0" solref="0.01 0.5" friction="2 0.05 0.0001" conaffinity="1" contype="1" name="finger2_pad_collision"/>
+                </body>
+            </body>
+        </body>
+    </worldbody>
+    <sensor>
+        <force name="force_ee" site="ft_frame"/>
+        <torque name="torque_ee" site="ft_frame"/>
+    </sensor>
+</mujoco>
