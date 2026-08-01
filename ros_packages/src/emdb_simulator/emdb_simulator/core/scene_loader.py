@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import os
+import re
 import time
 from copy import deepcopy
 from collections import OrderedDict
@@ -11,10 +12,12 @@ import numpy as np
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
+from std_msgs.msg import Bool, Float32
 from std_srvs.srv import Trigger
 
 import robosuite
 import robocasa
+import robocasa.utils.object_utils as OU
 from robosuite.environments.base import REGISTERED_ENVS
 from robocasa.environments.kitchen.kitchen import Kitchen
 from robocasa.models.scenes.scene_registry import LayoutType, StyleType
@@ -33,8 +36,8 @@ from emdb_interfaces.srv import (
     ResetEpisode,
     SaveDemos,
 )
-from emdb_simulator.core import robot_loader  # noqa: F401  registers UR5eOmron with robosuite
-from emdb_simulator.core import kitchen_lift_task  # noqa: F401  registers KitchenLift with robosuite
+from emdb_simulator.core import registered_robots  # noqa: F401  registers all custom robots
+from emdb_simulator.core import registered_tasks  # noqa: F401  registers all custom tasks
 from emdb_simulator.core.ros_keyboard_device import ROSKeyboardDevice
 from emdb_interfaces.msg import (
     ObjectState,
@@ -63,6 +66,7 @@ class SceneLoader(Node):
         self.declare_parameter("control_mode", "teleop")
         self.declare_parameter("collect_demos", False)
         self.declare_parameter("demo_dir", "/tmp/emdb_demos")
+        self.declare_parameter("perception_mode", "unified")
 
         self.task = self.get_parameter("task").value
         self.robot = self.get_parameter("robot").value
@@ -76,6 +80,24 @@ class SceneLoader(Node):
         self.demo_dir = self.get_parameter("demo_dir").value
         self.demo_tmp_directory = None
         self.env_info = None
+
+        # unified: single /object_states with every object (default).
+        # grouped: one /object_states/<fixture_name> per fixture objects are placed on/in.
+        # split: one /object_states/<object_name> per object.
+        # mdb: e-MDB cognitive-architecture-compatible named perceptions --
+        # one /emdb/simulator/sensor/<object_name> per object (like split),
+        # a companion /emdb/simulator/sensor/<object_name>/grasped per
+        # graspable object, and a single /emdb/simulator/sensor/progress
+        # (sparse task-success signal, matching e-MDB's "reward is just
+        # another perception" convention). See docs/source/architecture.md.
+        self.perception_mode = self.get_parameter("perception_mode").value
+        if self.perception_mode not in ("unified", "grouped", "split", "mdb"):
+            self.get_logger().warning(
+                f"Unknown perception_mode={self.perception_mode!r}, falling back to 'unified'."
+            )
+            self.perception_mode = "unified"
+        self._dynamic_object_state_pubs = {}
+        self._grasped_check_warned = False
 
         self.episode_id = 0
         self.step_id = 0
@@ -95,7 +117,17 @@ class SceneLoader(Node):
 
         self.joint_state_pub = self.create_publisher(JointState, "/joint_states", 10)
 
-        self.object_state_pub = self.create_publisher(ObjectStateArray, "/object_states", 10)
+        self.object_state_pub = (
+            self.create_publisher(ObjectStateArray, "/object_states", 10)
+            if self.perception_mode == "unified"
+            else None
+        )
+
+        self.progress_pub = (
+            self.create_publisher(Float32, "/emdb/simulator/sensor/progress", 10)
+            if self.perception_mode == "mdb"
+            else None
+        )
 
         self.observation_pub = self.create_publisher(Observation, "/observations", 10)
 
@@ -143,7 +175,8 @@ class SceneLoader(Node):
         self._init_device()
 
         self.get_logger().info(
-            f"Scene loaded -> layout={self.current_layout}, style={self.current_style}"
+            f"Scene loaded -> layout={self.current_layout}, style={self.current_style}, "
+            f"perception_mode={self.perception_mode}"
         )
 
         if self.control_mode == "teleop":
@@ -459,6 +492,7 @@ class SceneLoader(Node):
         self._publish_object_states()
         self._publish_observation(obs)
         self._publish_step_info(reward, terminated=success, truncated=False, success=success)
+        self._publish_progress(success)
         self.env.render()
 
     def _step_action_cb(self, request, response):
@@ -535,6 +569,7 @@ class SceneLoader(Node):
             self._publish_object_states()
             self._publish_observation(obs)
             self._publish_step_info(reward=0.0, terminated=False, truncated=False, success=False)
+            self._publish_progress(False)
 
             response.success = True
             response.message = (
@@ -614,35 +649,152 @@ class SceneLoader(Node):
         msg.effort = []
         self.joint_state_pub.publish(msg)
 
+    def _object_fixture_group(self, name, cfgs_by_name, seen=None):
+        """Resolve which fixture `name` was placed on/in, for perception_mode='grouped'.
+
+        Follows placement["object"] references (e.g. an ice cube placed "on"
+        a bowl) transitively until a real placement["fixture"] is found, or
+        falls back to "unplaced" if none can be resolved.
+        """
+        seen = seen or set()
+        if name in seen:
+            return "unplaced"
+        seen.add(name)
+
+        cfg = cfgs_by_name.get(name)
+        if cfg is None:
+            return "unplaced"
+
+        placement = cfg.get("placement") or {}
+        fixture = placement.get("fixture")
+        if fixture is not None and hasattr(fixture, "name"):
+            return fixture.name
+
+        ref_object = placement.get("object")
+        if ref_object:
+            return self._object_fixture_group(ref_object, cfgs_by_name, seen)
+
+        return "unplaced"
+
+    @staticmethod
+    def _sanitize_topic_segment(name):
+        safe = re.sub(r"[^a-zA-Z0-9_]", "_", str(name))
+        if not safe or not safe[0].isalpha():
+            safe = "g_" + safe
+        return safe
+
+    def _get_or_create_pub(self, topic, msg_type):
+        pub = self._dynamic_object_state_pubs.get(topic)
+        if pub is None:
+            pub = self.create_publisher(msg_type, topic, 10)
+            self._dynamic_object_state_pubs[topic] = pub
+            self.get_logger().info(f"Created perception topic {topic}")
+        return pub
+
+    def _get_or_create_object_states_pub(self, topic_suffix, topic_prefix="/object_states"):
+        return self._get_or_create_pub(f"{topic_prefix}/{topic_suffix}", ObjectStateArray)
+
+    def _check_grasped(self, name):
+        try:
+            return bool(OU.check_obj_grasped(self.env, name))
+        except Exception as exc:
+            if not self._grasped_check_warned:
+                self.get_logger().warning(
+                    f"OU.check_obj_grasped failed for object {name!r} ({exc}); "
+                    "reporting grasped=False for it (and any future failures) going forward."
+                )
+                self._grasped_check_warned = True
+            return False
+
+    def _publish_progress(self, success):
+        if self.progress_pub is None:
+            return
+        msg = Float32()
+        msg.data = float(success)
+        self.progress_pub.publish(msg)
+
     def _publish_object_states(self):
         sim = self.env.sim
-        msg = ObjectStateArray()
-        msg.header.stamp = self.get_clock().now().to_msg()
-        msg.header.frame_id = "world"
-        msg.objects = []
+        stamp = self.get_clock().now().to_msg()
 
-        for i in range(sim.model.njnt):
-            name = sim.model.joint_id2name(i)
-            if not name or ("obj" not in name and "distr" not in name):
+        # Read every object the task itself spawned (self.env.objects is
+        # populated generically by Kitchen for any task, keyed by the exact
+        # `name` used in _get_obj_cfgs) rather than guessing from joint name
+        # substrings -- composite tasks name objects semantically (e.g.
+        # "ice_bowl", "glass_cup"), not just "obj"/"distr".
+        object_states = {}
+        for name, obj_model in getattr(self.env, "objects", {}).items():
+            joints = obj_model.joints
+            if not joints:
                 continue
+            joint_name = joints[0]
+            qpos_addr = sim.model.get_joint_qpos_addr(joint_name)
+            if not isinstance(qpos_addr, tuple):
+                continue
+            qpos = sim.data.get_joint_qpos(joint_name)
 
-            qpos_addr = sim.model.get_joint_qpos_addr(name)
-            if isinstance(qpos_addr, tuple):
-                qpos = sim.data.get_joint_qpos(name)
+            obj = ObjectState()
+            obj.name = name
+            obj.pose.position.x = float(qpos[0])
+            obj.pose.position.y = float(qpos[1])
+            obj.pose.position.z = float(qpos[2])
+            obj.pose.orientation.w = float(qpos[3])
+            obj.pose.orientation.x = float(qpos[4])
+            obj.pose.orientation.y = float(qpos[5])
+            obj.pose.orientation.z = float(qpos[6])
 
-                obj = ObjectState()
-                obj.name = name
-                obj.pose.position.x = float(qpos[0])
-                obj.pose.position.y = float(qpos[1])
-                obj.pose.position.z = float(qpos[2])
-                obj.pose.orientation.w = float(qpos[3])
-                obj.pose.orientation.x = float(qpos[4])
-                obj.pose.orientation.y = float(qpos[5])
-                obj.pose.orientation.z = float(qpos[6])
+            object_states[name] = obj
 
-                msg.objects.append(obj)
+        if self.perception_mode == "unified":
+            msg = ObjectStateArray()
+            msg.header.stamp = stamp
+            msg.header.frame_id = "world"
+            msg.objects = list(object_states.values())
+            self.object_state_pub.publish(msg)
+            return
 
-        self.object_state_pub.publish(msg)
+        cfgs_by_name = None
+        topic_prefix = "/object_states"
+
+        if self.perception_mode == "split":
+            groups = {name: [obj] for name, obj in object_states.items()}
+        elif self.perception_mode == "mdb":
+            groups = {name: [obj] for name, obj in object_states.items()}
+            topic_prefix = "/emdb/simulator/sensor"
+            cfgs_by_name = {
+                cfg.get("name"): cfg for cfg in getattr(self.env, "object_cfgs", [])
+            }
+        else:  # grouped
+            cfgs_by_name = {
+                cfg.get("name"): cfg for cfg in getattr(self.env, "object_cfgs", [])
+            }
+            groups = {}
+            for name, obj in object_states.items():
+                key = self._object_fixture_group(name, cfgs_by_name)
+                groups.setdefault(key, []).append(obj)
+
+        for key, objs in groups.items():
+            pub = self._get_or_create_object_states_pub(
+                self._sanitize_topic_segment(key), topic_prefix
+            )
+            msg = ObjectStateArray()
+            msg.header.stamp = stamp
+            msg.header.frame_id = "world"
+            msg.objects = objs
+            pub.publish(msg)
+
+        if self.perception_mode == "mdb":
+            for name in object_states:
+                cfg = cfgs_by_name.get(name) or {}
+                if not cfg.get("graspable"):
+                    continue
+                grasped_pub = self._get_or_create_pub(
+                    f"/emdb/simulator/sensor/{self._sanitize_topic_segment(name)}/grasped",
+                    Bool,
+                )
+                grasped_msg = Bool()
+                grasped_msg.data = self._check_grasped(name)
+                grasped_pub.publish(grasped_msg)
 
 
     def _render_loop(self):

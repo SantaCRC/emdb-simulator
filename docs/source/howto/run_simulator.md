@@ -31,6 +31,7 @@ ros2 run emdb_simulator scene_loader --ros-args \
 | `control_mode` | `teleop` | `teleop` (timer-driven, keyboard input) or `rl` (external `/step_action` calls only — see {doc}`training_rl`). |
 | `collect_demos` | `false` | Record every teleop episode to a temp dir via robosuite's `DataCollectionWrapper`; see {doc}`recording_demos`. |
 | `demo_dir` | `/tmp/emdb_demos` | Default output directory for `/save_demos` when the request doesn't specify `out_dir`. |
+| `perception_mode` | `unified` | How object perceptions are published: `unified` (single `/object_states` topic with every object), `grouped` (one `/object_states/<fixture_name>` per fixture objects are placed on/in), `split` (one `/object_states/<object_name>` per object), or `mdb` (e-MDB-cognitive-architecture-compatible: per-object topics under `/emdb/simulator/sensor/...` plus a `.../grasped` fact per graspable object and a sparse `.../progress` signal). See {doc}`../architecture`. Fixed for the node's lifetime -- restart to change it. |
 
 ## Via the provided launch files
 

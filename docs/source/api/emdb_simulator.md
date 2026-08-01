@@ -40,10 +40,25 @@ to translate `SetDeltaAction`/`StepAction` deltas into robosuite's
    :show-inheritance:
 ```
 
+## `emdb_simulator.core.registered_robots`
+
+Registry module: imports one module per custom robot (starting with
+`robot_loader`), registering each with robosuite as a side effect. Imported
+by `scene_loader` instead of importing every robot module directly; new
+entries are appended here by {doc}`../howto/managing_robots`'s
+`scripts/robot_tool.py`.
+
+```{eval-rst}
+.. automodule:: emdb_simulator.core.registered_robots
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
 ## `emdb_simulator.core.robot_loader`
 
 Registers `UR5eOmron` (a UR5e arm on an Omron mobile base) with robosuite as
-an import side effect; imported by `scene_loader`. See {doc}`../architecture`.
+an import side effect; imported by `registered_robots`. See {doc}`../architecture`.
 
 ```{eval-rst}
 .. automodule:: emdb_simulator.core.robot_loader
@@ -65,12 +80,27 @@ default gripper) with robosuite as an import side effect; imported by
    :show-inheritance:
 ```
 
+## `emdb_simulator.core.registered_tasks`
+
+Registry module: imports one module per custom task (starting with
+`kitchen_lift_task`), registering each with robosuite as a side effect.
+Imported by `scene_loader` instead of importing every task module directly;
+new entries are appended here by {doc}`../howto/creating_tasks`'s
+`scripts/create_task.py`.
+
+```{eval-rst}
+.. automodule:: emdb_simulator.core.registered_tasks
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
 ## `emdb_simulator.core.kitchen_lift_task`
 
 Registers `KitchenLift`, a "lift" task (pick up a counter-top object and
 raise it above a height threshold) that still uses RoboCasa kitchen
 layouts/styles, with robosuite as an import side effect; imported by
-`scene_loader`. See {doc}`../howto/run_simulator` for the `task` parameter.
+`registered_tasks`. See {doc}`../howto/run_simulator` for the `task` parameter.
 
 ```{eval-rst}
 .. automodule:: emdb_simulator.core.kitchen_lift_task

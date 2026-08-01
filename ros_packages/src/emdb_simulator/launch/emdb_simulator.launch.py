@@ -8,12 +8,18 @@ from launch_ros.actions import Node
 def generate_launch_description():
     teleop = LaunchConfiguration('teleop')
     control_mode = PythonExpression(["'teleop' if '", teleop, "' == 'true' else 'rl'"])
+    perception_mode = LaunchConfiguration('perception_mode')
 
     return LaunchDescription([
         DeclareLaunchArgument(
             'teleop',
             default_value='false',
             description='Launch the keyboard client and drive scene_loader in teleop mode instead of rl.',
+        ),
+        DeclareLaunchArgument(
+            'perception_mode',
+            default_value='unified',
+            description='How object perceptions are published: unified, grouped, split, or mdb.',
         ),
         Node(
             package='emdb_simulator',
@@ -23,6 +29,7 @@ def generate_launch_description():
             parameters=[{
                 'task': 'KitchenLift',
                 'control_mode': control_mode,
+                'perception_mode': perception_mode,
             }],
         ),
         Node(

@@ -42,12 +42,15 @@ Owns the actual RoboCasa/robosuite `env`. The core node is
 
 - builds the robosuite `env` from parameters (`task`, `robot`, `layout_id`,
   `style_id`, `renderer`, ...). Importing `scene_loader` transitively
-  imports {py:mod}`emdb_simulator.core.robot_loader` and
-  {py:mod}`emdb_simulator.core.kitchen_lift_task`, which register the
-  custom robot (`UR5eOmron`) and task (`KitchenLift`) with robosuite as a
-  side effect; `robot_loader` in turn imports
-  {py:mod}`emdb_simulator.core.gripper_loader`, which registers
-  `TwoFG7Gripper` (`UR5eOmron`'s default gripper),
+  imports {py:mod}`emdb_simulator.core.registered_robots` and
+  {py:mod}`emdb_simulator.core.registered_tasks` -- small registry modules
+  that each import one module per custom robot/task (starting with
+  `robot_loader`'s `UR5eOmron` and `kitchen_lift_task`'s `KitchenLift`),
+  registering them with robosuite as a side effect; `robot_loader` in turn
+  imports {py:mod}`emdb_simulator.core.gripper_loader`, which registers
+  `TwoFG7Gripper` (`UR5eOmron`'s default gripper). New robots/tasks created
+  via {doc}`howto/managing_robots`/{doc}`howto/creating_tasks` are appended
+  to these registries automatically,
 - runs in one of two mutually exclusive **`control_mode`**s:
   - `teleop` (default): a timer loop at `publish_rate` Hz reads the last
     keyboard-driven delta from `ROSKeyboardDevice`, steps the env, and
@@ -56,10 +59,31 @@ Owns the actual RoboCasa/robosuite `env`. The core node is
   - `rl`: the periodic render loop is disabled entirely; physics only
     advances when `/step_action` or `/step_action_raw` is called, so an
     external agent has full control over the step cadence.
-- publishes `/joint_states` (`sensor_msgs/JointState`), `/object_states`
+- publishes `/joint_states` (`sensor_msgs/JointState`), object poses
   (`emdb_interfaces/ObjectStateArray`), `/observations`
   (`emdb_interfaces/Observation`, the flattened robosuite `obs_dict`), and
-  `/reward` (`emdb_interfaces/StepInfo`) after every step;
+  `/reward` (`emdb_interfaces/StepInfo`) after every step. Object poses are
+  read generically from `self.env.objects` (works for any task, not just
+  ones that name their object `"obj"`), and where they're published depends
+  on the `perception_mode` parameter (see {doc}`howto/run_simulator`):
+  `unified` (default) puts every object on a single `/object_states`;
+  `grouped` splits them into one `/object_states/<fixture_name>` topic per
+  fixture objects are placed on/in (resolved from each object's
+  `_get_obj_cfgs` placement, following `placement["object"]` references
+  transitively for objects placed relative to another object rather than a
+  fixture directly); `split` gives each object its own
+  `/object_states/<object_name>` topic; `mdb` targets the
+  [e-MDB cognitive-architecture framework](https://docs.pillar-robots.eu/)'s
+  perception convention (a fixed set of `{name, topic, message type}`
+  publishers, one topic per named percept, no bundled arrays) -- it reuses
+  `split`'s per-object mechanism but under `/emdb/simulator/sensor/...`
+  instead of `/object_states/...`, adds a `std_msgs/Bool` on
+  `/emdb/simulator/sensor/<object_name>/grasped` for every object whose cfg
+  has `graspable=True` (via `robocasa.utils.object_utils.check_obj_grasped`),
+  and publishes task success as a sparse `std_msgs/Float32` "perception" on
+  `/emdb/simulator/sensor/progress` (`1.0`/`0.0`, reusing `_check_success()`)
+  rather than only exposing it via `/reward` -- that framework models reward
+  as just another named perception rather than a dedicated channel;
 - optionally records every teleop episode to disk when `collect_demos:=true`
   (via robosuite's `DataCollectionWrapper`), and consolidates the successful
   ones into a robomimic-format `demo.hdf5` on `/save_demos`.

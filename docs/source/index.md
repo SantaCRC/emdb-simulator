@@ -15,6 +15,7 @@ architecture
 howto/index
 interfaces/index
 api/index
+llms
 ```
 
 ## At a glance
@@ -35,3 +36,4 @@ api/index
 - Want to train a policy? See {doc}`howto/training_rl`.
 - Looking for a message/service field? See {doc}`interfaces/index`.
 - Looking for a Python function/class? See {doc}`api/index`.
+- Automating task/robot creation with an LLM agent? See {doc}`llms`.
