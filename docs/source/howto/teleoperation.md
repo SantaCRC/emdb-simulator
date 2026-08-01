@@ -1,18 +1,20 @@
 # Teleoperating the Robot with a Keyboard
 
 This drives the simulator's `/set_delta_action` service by hand, using the
-`test_keyboard_client` node
+`keyboard_client` node
 ({py:class}`emdb_simulator.core.keyboard_client.KeyboardDeltaClient`).
 
 ## 1. Launch simulator + keyboard client
 
 ```bash
 source env.sh
-ros2 launch emdb_simulator test_robocasa.launch.py
+ros2 launch emdb_simulator emdb_simulator.launch.py teleop:=true
 ```
 
-This starts `test_scene_loader` with `control_mode:=teleop` and
-`test_keyboard_client` together. Make sure the terminal/window running the
+The `teleop:=true` argument starts `scene_loader` with `control_mode:=teleop`
+and `keyboard_client` together (by default, without `teleop:=true`, the
+launch file only starts `scene_loader` in `rl` mode and no keyboard client).
+Make sure the terminal/window running the
 keyboard client has keyboard focus — `pynput` listens globally, so any
 window works, but only the process that has focus will feel responsive.
 
@@ -46,7 +48,7 @@ Each key press sends a `SetDeltaAction` request; see
 
 ## 3. Changing task/robot/layout
 
-Pass parameters when launching, or edit `test_robocasa.launch.py`'s
+Pass parameters when launching, or edit `emdb_simulator.launch.py`'s
 `parameters=[...]` block — see {doc}`run_simulator` for the full parameter
 table. To change layout/style *without* restarting the node, call
 `/reset_episode` with a specific `layout_id`/`style_id` (`-1` keeps the

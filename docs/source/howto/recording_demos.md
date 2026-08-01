@@ -9,15 +9,16 @@ successful ones into a robomimic-compatible `demo.hdf5`, via robosuite's
 
 ```bash
 source env.sh
-ros2 run emdb_simulator test_scene_loader --ros-args \
+ros2 run emdb_simulator scene_loader --ros-args \
   -p control_mode:=teleop \
   -p collect_demos:=true
 ```
 
 Each episode is written to a fresh temp directory
 (`/tmp/emdb_demo_raw_<timestamp>`); this is logged on startup. Then run
-`test_keyboard_client` (or the `test_robocasa.launch.py` launch file, edited
-to set `collect_demos:=true`) and teleoperate normally — see
+`keyboard_client` (or the `emdb_simulator.launch.py` launch file with
+`teleop:=true`, edited to set `collect_demos:=true`) and teleoperate
+normally — see
 {doc}`teleoperation`.
 
 ```{note}

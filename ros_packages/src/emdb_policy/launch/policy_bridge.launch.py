@@ -6,7 +6,7 @@ def generate_launch_description():
     return LaunchDescription([
         Node(
             package='emdb_simulator',
-            executable='test_scene_loader',
+            executable='scene_loader',
             name='robocasa_rollout_node',
             output='screen',
             parameters=[{

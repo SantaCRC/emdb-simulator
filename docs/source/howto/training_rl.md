@@ -14,7 +14,7 @@ called):
 
 ```bash
 source env.sh
-ros2 run emdb_simulator test_scene_loader --ros-args -p control_mode:=rl
+ros2 run emdb_simulator scene_loader --ros-args -p control_mode:=rl
 ```
 
 ## 2. Train

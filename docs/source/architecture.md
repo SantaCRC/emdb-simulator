@@ -38,7 +38,7 @@ every field.
 
 Owns the actual RoboCasa/robosuite `env`. The core node is
 {py:class}`emdb_simulator.core.scene_loader.SceneLoader` (console script
-`test_scene_loader`, ROS node name `robocasa_rollout_node`), which:
+`scene_loader`, ROS node name `robocasa_rollout_node`), which:
 
 - builds the robosuite `env` from parameters (`task`, `robot`, `layout_id`,
   `style_id`, `renderer`, ...). Importing `scene_loader` transitively
@@ -66,7 +66,7 @@ Owns the actual RoboCasa/robosuite `env`. The core node is
 
 Two other standalone nodes exist for manual testing:
 {py:class}`emdb_simulator.core.keyboard_client.KeyboardDeltaClient` (console
-script `test_keyboard_client`), which turns key presses into
+script `keyboard_client`), which turns key presses into
 `/set_delta_action` calls, and
 {py:class}`emdb_simulator.core.position_server.PositionServer`, a minimal
 example service/publisher pair unrelated to the RoboCasa env.

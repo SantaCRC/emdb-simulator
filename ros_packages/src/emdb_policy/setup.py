@@ -27,7 +27,7 @@ setup(
     maintainer='Fabian Alvarez',
     maintainer_email='alvarez.fabian@outlook.com',
     description='Policy / RL agent node for the EMDB simulator',
-    license='TODO',
+    license='MIT',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [

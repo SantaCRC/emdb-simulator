@@ -2,7 +2,7 @@
 """Train a PPO policy against the emdb simulator's RL ROS interface.
 
 Run the simulator separately first, with control_mode:=rl:
-    ros2 run emdb_simulator test_scene_loader --ros-args -p control_mode:=rl
+    ros2 run emdb_simulator scene_loader --ros-args -p control_mode:=rl
 Then, to start fresh:
     ros2 run emdb_policy train_sb3 --timesteps 20000 --save-path /tmp/emdb_ppo
 Or to continue training an existing checkpoint:

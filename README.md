@@ -120,7 +120,7 @@ source install/setup.bash
 
 ```bash
 source env.sh
-ros2 launch emdb_simulator test_robocasa.launch.py
+ros2 launch emdb_simulator emdb_simulator.launch.py
 ```
 
 See [`docs/source/howto/run_simulator.md`](docs/source/howto/run_simulator.md)

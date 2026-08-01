@@ -10,7 +10,7 @@ success is not guaranteed since /reset_episode does not reproduce the exact
 recorded scene layout (object positions), only the task/robot/layout/style.
 
 Run the simulator separately first, with control_mode:=rl:
-    ros2 run emdb_simulator test_scene_loader --ros-args -p control_mode:=rl
+    ros2 run emdb_simulator scene_loader --ros-args -p control_mode:=rl
 Then:
     ros2 run emdb_policy replay_demo --dataset <path>/lerobot --episode 0
 """

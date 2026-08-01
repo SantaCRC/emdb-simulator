@@ -1,6 +1,6 @@
 # Running the Simulator Node
 
-The core node is `emdb_simulator`'s `test_scene_loader` executable
+The core node is `emdb_simulator`'s `scene_loader` executable
 ({py:class}`emdb_simulator.core.scene_loader.SceneLoader`, ROS node name
 `robocasa_rollout_node`). It can be launched directly with `ros2 run` or
 through one of the two provided launch files.
@@ -9,7 +9,7 @@ through one of the two provided launch files.
 
 ```bash
 source env.sh
-ros2 run emdb_simulator test_scene_loader --ros-args \
+ros2 run emdb_simulator scene_loader --ros-args \
   -p task:=PickPlaceCounterToCabinet \
   -p robot:=UR5eOmron \
   -p layout_id:=12 \
@@ -40,17 +40,21 @@ ros2 run emdb_simulator test_scene_loader --ros-args \
 * - Launch file
   - Package
   - Starts
-* - `test_robocasa.launch.py`
+* - `emdb_simulator.launch.py`
   - `emdb_simulator`
-  - `test_scene_loader` (`control_mode:=teleop`, task `KitchenLift`) + `test_keyboard_client`
+  - `scene_loader` (task `KitchenLift`, `control_mode:=rl` by default). Pass
+    `teleop:=true` to switch `control_mode:=teleop` and also start
+    `keyboard_client`.
 * - `policy_bridge.launch.py`
   - `emdb_policy`
-  - `test_scene_loader` (`control_mode:=rl`) + `emdb_policy`'s `policy_node`
+  - `scene_loader` (`control_mode:=rl`) + `emdb_policy`'s `policy_node`
 ```
 
 ```bash
-ros2 launch emdb_simulator test_robocasa.launch.py
-# or, for RL:
+ros2 launch emdb_simulator emdb_simulator.launch.py
+# or, for manual teleoperation:
+ros2 launch emdb_simulator emdb_simulator.launch.py teleop:=true
+# or, for RL via the policy bridge:
 ros2 launch emdb_policy policy_bridge.launch.py
 ```
 
