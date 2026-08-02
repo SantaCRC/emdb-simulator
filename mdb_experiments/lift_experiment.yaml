@@ -1,0 +1,317 @@
+# lift_experiment.yaml -- e-MDB cognitive-architecture experiment config for
+# emdb_simulator's KitchenLift task.
+#
+# STATUS: hand-authored reference template, field-verified against the real
+# e-MDB interfaces (cognitive_processes_interfaces, cognitive_node_interfaces)
+# in a sibling ws_bartender workspace, but NOT YET RUNNABLE and NOT tested
+# end-to-end (no ROS2 environment was available to run either side while
+# writing this). Structurally mirrors ws_bartender's own
+# src/emdb_experiments_gii/experiments/experiments/sim_2d_experiment.yaml,
+# adapted for a continuous-action 3D manipulation task instead of a 2D
+# ball-and-box sim. Known gaps, in order of what blocks running this:
+#
+#   1. BRIDGE NODE (not built yet): emdb_simulator's scene_loader node
+#      speaks its own protocol (/step_action, /reset_episode using
+#      emdb_interfaces types), not e-MDB's (cognitive_node_interfaces.srv.
+#      Action, cognitive_processes_interfaces.srv.WorldReset). Nothing under
+#      `Control:` below will connect until a small adapter node exists that
+#      hosts executed_action_service/world_reset_service, subscribes to
+#      control_topic, and translates to/from scene_loader's existing
+#      services. Recommended home: a new package in ws_bartender (e.g.
+#      src/emdb_experiments_gii/lift_emdb/), mirroring where sim_2d_emdb
+#      lives, so it has cognitive_node_interfaces/cognitive_processes_interfaces
+#      available; it will additionally need emdb_interfaces (from this repo)
+#      sourced in the same environment to call scene_loader as a client.
+#   2. PERCEPTION PARSING: the Perception nodes below use the generic
+#      cognitive_nodes.perception.Perception base class, not
+#      cognitive_nodes.perception.Sim2DPerception (which is 2D-specific and
+#      won't parse our messages). `obj` publishes emdb_interfaces/
+#      ObjectStateArray, a nested message (objects[].pose.position/
+#      orientation) unlike Sim2DPerception's flat Object2DListMsg fields --
+#      it likely needs a small custom Perception subclass to flatten/
+#      normalize it. `obj_grasped`/`progress` are plain std_msgs/Bool and
+#      std_msgs/Float32, simple enough the generic class may work as-is.
+#   3. NUMERIC BOUNDS: every `bounds: [...]` below (action deltas, object
+#      position ranges) is a small placeholder, not a measured/tuned value.
+#      Tune the position bounds against real `ros2 topic echo
+#      /emdb/simulator/sensor/obj` output once the bridge exists; tune the
+#      action bounds against the UR5eOmron's actual configured controller
+#      delta limits.
+#
+# To exercise the simulator side independently while the bridge is being
+# built: `ros2 launch emdb_simulator emdb_simulator.launch.py teleop:=false
+# perception_mode:=mdb` (this repo's launch file -- publishes exactly the
+# three /emdb/simulator/sensor/... topics this file's Perceptions list
+# expects) and confirm with `ros2 topic list`/`ros2 topic echo`.
+
+Experiment:
+    name: lift_main_loop
+    class_name: cognitive_processes.main_loop.MainLoop
+    new_executor: True
+    threads: 2
+    parameters:
+        iterations: 60000  # placeholder, untuned
+        trials: 500        # placeholder, untuned
+        subgoals: False
+        softmax_selection: False
+        softmax_temperature: 0.3
+        kill_on_finish: True
+Control:
+    id: ltm_emdb_simulator
+    control_topic: /main_loop/control
+    control_msg: cognitive_processes_interfaces.msg.ControlMsg
+    episodes_topic: /main_loop/episodes
+    episodes_msg: cognitive_processes_interfaces.msg.Episode
+    # TODO(bridge node): host these two services and the control_topic
+    # subscription, translating to emdb_simulator's /step_action and
+    # /reset_episode -- see gap #1 above.
+    executed_action_service: /emdb/simulator/executed_action
+    executed_action_msg: cognitive_node_interfaces.srv.Action
+    world_reset_service: /emdb/simulator/world_reset
+    world_reset_msg: cognitive_processes_interfaces.srv.WorldReset
+
+LTM:
+    Files:
+        -
+            id: goodness
+            class: core.file.FileGoodness
+            file: goodness.txt
+        -
+            id: trials
+            class: core.file.FileTrialsSuccess
+            file: trials.txt
+    Connectors:
+        -
+            data: Space
+            default_class: cognitive_nodes.space.ANNSpace
+        -
+            data: Perception
+            default_class: cognitive_nodes.perception.Perception
+        -
+            data: PNode
+            default_class: dummy_nodes.dummy_pnodes.NonActivatedDummyPNode
+        -
+            data: CNode
+            default_class: cognitive_nodes.cnode.CNode
+        -
+            data: Goal
+            default_class: cognitive_nodes.goal.Goal
+        -
+            data: WorldModel
+            default_class: cognitive_nodes.world_model.WorldModel
+        -
+            data: Policy
+            default_class: cognitive_nodes.policy.PolicyBlocking
+
+    Nodes:
+        WorldModel:
+            -
+                name: KITCHEN_LIFT
+                class_name: cognitive_nodes.world_model.WorldModel
+                parameters:
+                    # StepAction.srv's 7 continuous dims (dx,dy,dz,droll,
+                    # dpitch,dyaw are meters/radians end-effector deltas per
+                    # step; grasp is StepAction's int32 field, represented
+                    # here as a float in [-1,1] and cast to int on the
+                    # bridge side). All bounds are small untuned placeholders.
+                    actuation_config:
+                        arm:
+                            dx:
+                                type: float
+                                bounds: [-0.05, 0.05]
+                            dy:
+                                type: float
+                                bounds: [-0.05, 0.05]
+                            dz:
+                                type: float
+                                bounds: [-0.05, 0.05]
+                            droll:
+                                type: float
+                                bounds: [-0.5, 0.5]
+                            dpitch:
+                                type: float
+                                bounds: [-0.5, 0.5]
+                            dyaw:
+                                type: float
+                                bounds: [-0.5, 0.5]
+                            grasp:
+                                type: float
+                                bounds: [-1.0, 1.0]
+                    # Mirrors the Perceptions list below -- KitchenLift
+                    # always spawns exactly one object named "obj" (see
+                    # kitchen_lift_task.py's _get_obj_cfgs), so this is a
+                    # fixed, known perception set for this specific task.
+                    perception_config:
+                        obj:
+                            x:
+                                type: float
+                                bounds: [-2.0, 2.0]
+                            y:
+                                type: float
+                                bounds: [-2.0, 2.0]
+                            z:
+                                type: float
+                                bounds: [0.0, 2.0]
+                        obj_grasped:
+                            data:
+                                type: bool
+                        progress:
+                            data:
+                                type: float
+                                bounds: [0.0, 1.0]
+
+        Perception:
+            -
+                name: obj
+                class_name: cognitive_nodes.perception.Perception
+                parameters:
+                    default_msg: emdb_interfaces.msg.ObjectStateArray
+                    default_topic: /emdb/simulator/sensor/obj
+                    normalize_data:
+                        x_min: -2.0
+                        x_max: 2.0
+                        y_min: -2.0
+                        y_max: 2.0
+            -
+                name: obj_grasped
+                class_name: cognitive_nodes.perception.Perception
+                parameters:
+                    default_msg: std_msgs.msg.Bool
+                    default_topic: /emdb/simulator/sensor/obj/grasped
+            -
+                name: progress
+                class_name: cognitive_nodes.perception.Perception
+                parameters:
+                    default_msg: std_msgs.msg.Float32
+                    default_topic: /emdb/simulator/sensor/progress
+
+        RobotPurpose:
+            -
+                name: lift_object_need
+                class_name: cognitive_nodes.robot_purpose.RobotPurpose
+                parameters:
+                    weight: 1.0
+                    drive_id: 'lift_object_drive'
+                    purpose_type: 'Mission'
+                    terminal: True
+            -
+                name: novelty_need
+                class_name: cognitive_nodes.robot_purpose.RobotPurpose
+                parameters:
+                    weight: 0.2
+                    drive_id: 'novelty_drive'
+                    purpose_type: 'Need'
+        Drive:
+            -
+                # Reads /emdb/simulator/sensor/progress directly -- this is
+                # the same sparse float(_check_success()) signal already
+                # published on /reward, exposed as a perception per e-MDB's
+                # "reward is just another perception" convention.
+                name: lift_object_drive
+                class_name: cognitive_nodes.drive.DriveExponential
+                parameters:
+                    input_topic: /emdb/simulator/sensor/progress
+                    input_msg: std_msgs.msg.Float32
+                    min_eval: 0.8
+                    neighbors: [{"name": "lift_object_need", "node_type": "RobotPurpose"}]
+            -
+                name: novelty_drive
+                class_name: cognitive_nodes.novelty.DriveNovelty
+                parameters:
+                    neighbors: [{"name": "novelty_need", "node_type": "RobotPurpose"}]
+        Goal:
+            -
+                name: lift_object_goal
+                class_name: cognitive_nodes.goal.GoalMotiven
+                parameters:
+                    neighbors: [{"name": "lift_object_drive", "node_type": "Drive"}]
+            -
+                name: novelty_goal
+                class_name: cognitive_nodes.goal.GoalMotiven
+                parameters:
+                    neighbors: [{"name": "novelty_drive", "node_type": "Drive"}]
+        PNode:
+            -
+                name: novelty_pnode
+                class_name: dummy_nodes.dummy_pnodes.ActivatedDummyPNode
+                parameters:
+                    space_class: cognitive_nodes.space.ActivatedDummySpace
+        CNode:
+            -
+                # lift_object_goal is intentionally NOT wired to a CNode/
+                # Policy here, mirroring sim_2d_experiment.yaml's own
+                # object_in_box_goal: it's a passively-evaluated Mission
+                # (terminal: True ends the trial when its Drive crosses
+                # min_eval) rather than something a dedicated policy pursues
+                # directly. Actual behavior comes from novelty-driven random
+                # actions below, same as the reference experiment.
+                name: novelty_cnode
+                class_name: cognitive_nodes.cnode.CNode
+                parameters:
+                    neighbors: [{"name": "novelty_goal", "node_type": "Goal"}, {"name": "KITCHEN_LIFT", "node_type": "WorldModel"}, {"name": "novelty_pnode", "node_type": "PNode"}]
+
+        Policy:
+            -
+                name: random_action
+                class_name: cognitive_nodes.novelty.PolicyRandomAction
+                parameters:
+                    service_msg: cognitive_node_interfaces.srv.Action
+                    service_name: /emdb/simulator/executed_action
+                    neighbors: [{"name": "novelty_cnode", "node_type": "CNode"}]
+                    actuation_config:
+                        arm:
+                            dx:
+                                type: float
+                                bounds: [-0.05, 0.05]
+                            dy:
+                                type: float
+                                bounds: [-0.05, 0.05]
+                            dz:
+                                type: float
+                                bounds: [-0.05, 0.05]
+                            droll:
+                                type: float
+                                bounds: [-0.5, 0.5]
+                            dpitch:
+                                type: float
+                                bounds: [-0.5, 0.5]
+                            dyaw:
+                                type: float
+                                bounds: [-0.5, 0.5]
+                            grasp:
+                                type: float
+                                bounds: [-1.0, 1.0]
+                    perception_config:
+                        obj:
+                            x:
+                                type: float
+                                bounds: [-2.0, 2.0]
+                            y:
+                                type: float
+                                bounds: [-2.0, 2.0]
+                            z:
+                                type: float
+                                bounds: [0.0, 2.0]
+                        obj_grasped:
+                            data:
+                                type: bool
+                        progress:
+                            data:
+                                type: float
+                                bounds: [0.0, 1.0]
+
+
+EmdbSimulator:
+    Perceptions:
+        -
+            name: obj
+            perception_topic: /emdb/simulator/sensor/obj
+            perception_msg: emdb_interfaces.msg.ObjectStateArray
+        -
+            name: obj_grasped
+            perception_topic: /emdb/simulator/sensor/obj/grasped
+            perception_msg: std_msgs.msg.Bool
+        -
+            name: progress
+            perception_topic: /emdb/simulator/sensor/progress
+            perception_msg: std_msgs.msg.Float32
