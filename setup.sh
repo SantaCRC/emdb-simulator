@@ -106,6 +106,30 @@ if [ "$WITH_DOCS" -eq 1 ]; then
     pip install -r "$REPO_ROOT/docs/requirements.txt"
 fi
 
+log "Checking RoboCasa kitchen assets (textures/fixtures/objects)..."
+# robocasa prints its own stdout noise on import (e.g. a "mimicgen not
+# installed" notice), so the result is tagged with a unique marker and
+# extracted with grep/sed rather than trusting stdout to only contain it.
+MISSING_ASSET_TYPES="$(python3 - <<'PYEOF' | grep '^MISSING_ASSET_TYPES:' | sed 's/^MISSING_ASSET_TYPES://'
+import os
+from robocasa.scripts.download_kitchen_assets import DOWNLOAD_ASSET_REGISTRY
+
+missing = [
+    name for name, cfg in DOWNLOAD_ASSET_REGISTRY.items()
+    if not (os.path.isdir(cfg["folder"]) and os.listdir(cfg["folder"]))
+]
+print(f"MISSING_ASSET_TYPES:{' '.join(missing)}")
+PYEOF
+)"
+if [ -n "$MISSING_ASSET_TYPES" ]; then
+    echo "  Missing/empty: $MISSING_ASSET_TYPES (downloading, ~10GB total -- only the missing types)"
+    # download_kitchen_assets asks for a one-time y/n confirmation before
+    # fetching; auto-confirm it instead of hanging non-interactively.
+    yes | python -m robocasa.scripts.download_kitchen_assets --type $MISSING_ASSET_TYPES
+else
+    echo "  All kitchen asset types already present, skipping download."
+fi
+
 # colcon must be importable via the venv's python (python -m colcon), so that
 # packages built by it get console-script shebangs pointing at the venv --
 # otherwise built nodes can't import venv-only deps like robosuite.

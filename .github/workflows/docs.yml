@@ -33,10 +33,18 @@ jobs:
       - name: Install project + docs dependencies
         run: |
           python -m pip install --upgrade pip
+          # robocasa depends on lerobot, which pulls in torch's default CUDA
+          # build (~2.7GB of torch + nvidia-*-cu12 wheels) even on this
+          # CPU-only runner -- enough to blow the runner's disk quota.
+          # Preinstalling the CPU wheel first satisfies robocasa's
+          # torch<2.8.0,>=2.2.1 constraint without pip ever reaching for CUDA.
+          pip install torch==2.7.1+cpu torchvision==0.22.1+cpu --index-url https://download.pytorch.org/whl/cpu
           # scene_loader.py/robocasa_node.py import robosuite/robocasa at module
           # level, so autodoc needs them actually importable, not just mocked.
-          pip install -e misc/robosuite
-          pip install -e misc/robocasa
+          # Installed together so pip's resolver settles on one consistent
+          # version set instead of installing robosuite's preferred versions
+          # then immediately uninstalling/reinstalling robocasa's exact pins.
+          pip install -e misc/robosuite -e misc/robocasa
           pip install -r docs/requirements.txt
 
       - name: Build docs
