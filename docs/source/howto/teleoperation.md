@@ -15,7 +15,7 @@ The `teleop:=true` argument starts `scene_loader` with `control_mode:=teleop`
 and `keyboard_client` together (by default, without `teleop:=true`, the
 launch file only starts `scene_loader` in `rl` mode and no keyboard client).
 Make sure the terminal/window running the
-keyboard client has keyboard focus — `pynput` listens globally, so any
+keyboard client has keyboard focus. `pynput` listens globally, so any
 window works, but only the process that has focus will feel responsive.
 
 ## 2. Controls
@@ -49,7 +49,7 @@ Each key press sends a `SetDeltaAction` request; see
 ## 3. Changing task/robot/layout
 
 Pass parameters when launching, or edit `emdb_simulator.launch.py`'s
-`parameters=[...]` block — see {doc}`run_simulator` for the full parameter
+`parameters=[...]` block. See {doc}`run_simulator` for the full parameter
 table. To change layout/style *without* restarting the node, call
 `/reset_episode` with a specific `layout_id`/`style_id` (`-1` keeps the
 current one):
@@ -60,4 +60,4 @@ ros2 service call /reset_episode emdb_interfaces/srv/ResetEpisode "{layout_id: 1
 
 ## Next
 
-- {doc}`recording_demos` — capture what you just did as training data.
+- {doc}`recording_demos`: capture what you just did as training data.

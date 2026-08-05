@@ -1,7 +1,7 @@
 # `emdb_policy`
 
 RL/policy-side package. Talks to `emdb_simulator` only through the
-`emdb_interfaces` ROS topics/services (see {doc}`../architecture`) — no
+`emdb_interfaces` ROS topics/services (see {doc}`../architecture`); no
 robosuite/robocasa/MuJoCo imports here.
 
 ## `emdb_policy.agent_bridge`

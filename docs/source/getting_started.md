@@ -28,7 +28,7 @@ packages that import it.
 
 ## Prerequisites
 
-- Ubuntu with **ROS 2** installed under `/opt/ros/<distro>` — `setup.sh`
+- Ubuntu with **ROS 2** installed under `/opt/ros/<distro>`. `setup.sh`
   auto-detects whichever distro is present (e.g. Humble); set `ROS_DISTRO`
   yourself beforehand if more than one is installed.
 - Python 3 with the `venv` module available.
@@ -48,7 +48,7 @@ git submodule update --init --recursive
 
 ## Setting up the environment
 
-Run `setup.sh` from the repo root — it is idempotent (safe to re-run; every
+Run `setup.sh` from the repo root. It is idempotent (safe to re-run; every
 step checks whether it's already done before acting):
 
 ```bash
@@ -72,7 +72,7 @@ It:
 5. builds the `ros_packages` workspace with `colcon build --symlink-install`.
 
 Once set up, every shell that runs ROS 2 nodes from this workspace should
-source `env.sh` rather than sourcing ROS 2 and the venv manually — ordering
+source `env.sh` rather than sourcing ROS 2 and the venv manually: ordering
 matters (venv vs. ROS `setup.bash`), and a couple of environment variables
 are required:
 
@@ -83,7 +83,7 @@ source env.sh
 `env.sh`:
 
 - sources ROS 2's `setup.bash`, then the `.venv` virtualenv (in that order,
-  so the venv's Python doesn't shadow ROS 2's tools) — override the venv
+  so the venv's Python doesn't shadow ROS 2's tools); override the venv
   path with `VENV_DIR=/path/to/venv source env.sh`,
 - sets `RMW_IMPLEMENTATION=rmw_cyclonedds_cpp` (unless already set in the
   shell),
@@ -96,7 +96,7 @@ source env.sh
 - defines convenience aliases: `colcon_dev` (build with the venv's Python
   interpreter), `colcon_clean_build` (wipes `build/ install/ log/` and
   rebuilds), and `emdb_env` (a diagnostic that prints which `ros2`/`python`
-  are active — useful for confirming you're not accidentally running the
+  are active; useful for confirming you're not accidentally running the
   system Python).
 
 ## Building the ROS 2 workspace
@@ -136,5 +136,5 @@ must be installed in whichever environment runs `make html` (the same
 
 ## Next steps
 
-- {doc}`architecture` — how the packages fit together.
-- {doc}`howto/index` — task-oriented guides (teleop, training, replay...).
+- {doc}`architecture`: how the packages fit together.
+- {doc}`howto/index`: task-oriented guides (teleop, training, replay...).

@@ -21,7 +21,7 @@ time the sim steps (see {py:meth}`emdb_simulator.core.scene_loader.SceneLoader._
 | `entries` | `ObservationEntry[]` | One entry per numeric key in the RoboCasa `obs_dict`; non-numeric keys are dropped. |
 
 `AgentBridge` matches `Observation`/`StepInfo` pairs by
-`(episode_id, step_id)` before returning from `step()`/`reset()` — see
+`(episode_id, step_id)` before returning from `step()`/`reset()`. See
 {py:func}`emdb_policy.agent_bridge.observation_to_dict` for the inverse
 (rebuilding an `obs_dict` from this message).
 
@@ -100,7 +100,7 @@ Synchronous RL step call (`/step_action`). Only served when
 `control_mode:=rl`; blocks (on the caller's side, via `AgentBridge`) until
 the matching `Observation`/`StepInfo` has been published.
 
-**Request** — same delta/base/grasp/`next_arm`/`next_robot` fields as
+**Request**: same delta/base/grasp/`next_arm`/`next_robot` fields as
 `SetDeltaAction`, minus `reset`/`toggle_base_mode` (episode reset goes
 through `ResetEpisode` instead).
 
@@ -115,7 +115,7 @@ through `ResetEpisode` instead).
 
 ### `StepActionRaw`
 
-Raw robosuite action-vector passthrough (`/step_action_raw`) — bypasses the
+Raw robosuite action-vector passthrough (`/step_action_raw`); bypasses the
 teleop delta-device translation `StepAction` goes through. Used to replay
 recorded demo actions that are already in the sim's native `env.step()`
 action space (see {doc}`../howto/replaying_demos`).
@@ -126,7 +126,7 @@ action space (see {doc}`../howto/replaying_demos`).
 |---|---|
 | `action` | `float64[]` |
 
-**Response** — same as `StepAction`.
+**Response**: same as `StepAction`.
 
 ### `ResetEpisode`
 
@@ -150,7 +150,7 @@ Resets the episode (`/reset_episode`), optionally changing layout/style.
 ### `SaveDemos`
 
 Consolidates recorded teleop episodes (`collect_demos:=true`) into a
-robomimic/mimicgen-compatible `demo.hdf5` — see {doc}`../howto/recording_demos`.
+robomimic/mimicgen-compatible `demo.hdf5`. See {doc}`../howto/recording_demos`.
 Only successful episodes are kept.
 
 **Request**
@@ -185,6 +185,6 @@ unrelated to the RoboCasa environment.
 **Response**: `success` (`bool`), `message` (`string`).
 
 ```{note}
-Not currently wired up to any node in this workspace — kept for reference /
+Not currently wired up to any node in this workspace; kept for reference or
 future use.
 ```

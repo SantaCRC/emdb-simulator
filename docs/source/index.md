@@ -20,13 +20,13 @@ llms
 
 ## At a glance
 
-- **{ref}`emdb_simulator`** — owns the MuJoCo/robosuite/RoboCasa
+- **{ref}`emdb_simulator`** owns the MuJoCo/robosuite/RoboCasa
   environment, steps physics, and publishes observations/joint states/object
   poses while exposing action services.
-- **{ref}`emdb_policy`** — a separate process that consumes the
+- **{ref}`emdb_policy`** is a separate process that consumes the
   simulator's ROS interface only; hosts a `gymnasium.Env` wrapper, an SB3 PPO
   training script, and a demo-replay tool.
-- **[emdb_interfaces](interfaces/index.md)** — the custom `.msg`/`.srv` definitions shared
+- **[emdb_interfaces](interfaces/index.md)** holds the custom `.msg`/`.srv` definitions shared
   between the two.
 
 ## Quick links

@@ -23,15 +23,15 @@ ros2 run emdb_simulator scene_loader --ros-args \
 |---|---|---|
 | `task` | `PickPlaceCounterToCabinet` | RoboCasa/robosuite environment name. Includes `emdb_simulator`'s own {py:class}`emdb_simulator.core.kitchen_lift_task.KitchenLift` ("pick up and raise an object above a height threshold on a kitchen island"), registered as a side effect of importing `kitchen_lift_task`. |
 | `robot` | `UR5eOmron` | Robot model to load. `UR5eOmron` is {py:class}`emdb_simulator.core.robot_loader.UR5eOmron` (a UR5e arm on an Omron mobile base), registered as a side effect of importing `robot_loader`; its default gripper is `TwoFG7Gripper` ({py:class}`emdb_simulator.core.gripper_loader.TwoFG7Gripper`, an OnRobot 2FG7 parallel gripper), registered the same way by `gripper_loader`. |
-| `layout_id` | `12` | Kitchen layout id (`-1` picks one at random). Layouts `1`–`10` are "test" layouts and include an `open_cabinet` fixture that some tasks' cabinet-geom lookups can't handle — prefer `11`–`60` ("train" layouts) unless you specifically need a test layout. Layout `11` has no kitchen island, so it doesn't work with `KitchenLift` (which needs one); layout `12` does. |
+| `layout_id` | `12` | Kitchen layout id (`-1` picks one at random). Layouts `1` to `10` are "test" layouts and include an `open_cabinet` fixture that some tasks' cabinet-geom lookups can't handle, so prefer `11` to `60` ("train" layouts) unless you specifically need a test layout. Layout `11` has no kitchen island, so it doesn't work with `KitchenLift` (which needs one); layout `12` does. |
 | `style_id` | `11` | Kitchen visual style id (`-1` picks one at random). |
 | `show_walls` | `false` | Disable the enclosing-wall render wrapper's transparency (walls fully visible). |
 | `renderer` | `mjviewer` | robosuite/MuJoCo renderer backend. |
 | `publish_rate` | `20.0` | Hz for the teleop render/step loop and topic publishing. |
-| `control_mode` | `teleop` | `teleop` (timer-driven, keyboard input) or `rl` (external `/step_action` calls only — see {doc}`training_rl`). |
+| `control_mode` | `teleop` | `teleop` (timer-driven, keyboard input) or `rl` (external `/step_action` calls only, see {doc}`training_rl`). |
 | `collect_demos` | `false` | Record every teleop episode to a temp dir via robosuite's `DataCollectionWrapper`; see {doc}`recording_demos`. |
 | `demo_dir` | `/tmp/emdb_demos` | Default output directory for `/save_demos` when the request doesn't specify `out_dir`. |
-| `perception_mode` | `unified` | How object perceptions are published: `unified` (single `/object_states` topic with every object), `grouped` (one `/object_states/<fixture_name>` per fixture objects are placed on/in), `split` (one `/object_states/<object_name>` per object), or `mdb` (e-MDB-cognitive-architecture-compatible: per-object topics under `/emdb/simulator/sensor/...` plus a `.../grasped` fact per graspable object and a sparse `.../progress` signal). See {doc}`../architecture`. Fixed for the node's lifetime -- restart to change it. |
+| `perception_mode` | `unified` | How object perceptions are published: `unified` (single `/object_states` topic with every object), `grouped` (one `/object_states/<fixture_name>` per fixture objects are placed on/in), `split` (one `/object_states/<object_name>` per object), or `mdb` (e-MDB-cognitive-architecture-compatible: per-object topics under `/emdb/simulator/sensor/...` plus a `.../grasped` fact per graspable object and a sparse `.../progress` signal). See {doc}`../architecture`. Fixed for the node's lifetime; restart to change it. |
 | `record_video` | `false` | Enable per-episode offscreen mp4 recording. See {doc}`recording_video`. |
 | `record_video_dir` | `/tmp/emdb_videos` | Parent directory for recorded episode videos and camera previews. |
 | `record_video_episodes` | `all` | Which episodes to record: `all`, a single id (`5`), or comma-separated ids/ranges (`0-2,10-12`). |
@@ -42,7 +42,7 @@ ros2 run emdb_simulator scene_loader --ros-args \
 | `record_video_stride` | `1` | Capture every Nth simulation step (`1` = every step). |
 | `record_video_crf` | `18` | libx264 CRF quality (`0`=lossless, `18`=near-lossless, `23`=default, `51`=worst). |
 | `record_video_keep_successes` | `false` | Also keep any episode where the task succeeds, even outside `record_video_episodes`. See {doc}`recording_video` for the cost tradeoff. |
-| `preview_camera` | `false` | Debug dry-run: build the scene, save one PNG per camera under `record_video_dir`, log available camera names, then exit -- no episode is stepped. Ignores `control_mode`/teleop. |
+| `preview_camera` | `false` | Debug dry-run: build the scene, save one PNG per camera under `record_video_dir`, log available camera names, then exit. No episode is stepped. Ignores `control_mode`/teleop. |
 | `preview_camera_names` | `all` | Cameras to preview: `all` or a comma-separated list of camera names. |
 | `custom_cameras_file` | `""` | Path to a YAML file defining extra cameras. Empty = none. Only applied for `task=KitchenLift`. See {doc}`recording_video`. |
 

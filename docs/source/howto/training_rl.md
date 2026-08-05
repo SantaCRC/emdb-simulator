@@ -4,7 +4,7 @@
 ({py:mod}`emdb_policy.train_sb3`) trains a PPO policy against
 {py:class}`emdb_policy.gym_env.EmdbGymEnv`, a `gymnasium.Env` wrapper around
 {py:class}`emdb_policy.agent_bridge.AgentBridge`. It has no dependency on
-robosuite/robocasa/MuJoCo itself — only on the simulator's ROS interface.
+robosuite/robocasa/MuJoCo itself, only on the simulator's ROS interface.
 
 ## 1. Start the simulator in RL mode
 
@@ -53,7 +53,7 @@ ros2 run emdb_policy train_sb3 \
 
 ## Action / observation spaces
 
-- **Action**: `Box(-1, 1, shape=(7,))` — `[dx, dy, dz, droll, dpitch, dyaw, gripper]`.
+- **Action**: `Box(-1, 1, shape=(7,))`, `[dx, dy, dz, droll, dpitch, dyaw, gripper]`.
   Position/rotation components are scaled by `pos_scale`/`rot_scale`
   (defaults `0.05`/`0.5`) before being sent; `gripper` is an absolute
   open(`<=0`)/closed(`>0`) command that `AgentBridge.step_vector` converts
@@ -65,5 +65,5 @@ ros2 run emdb_policy train_sb3 \
 
 ## Next
 
-- {doc}`replaying_demos` — validate the ROS interface against real recorded
+- {doc}`replaying_demos`: validate the ROS interface against real recorded
   behavior before trusting RL training on it.

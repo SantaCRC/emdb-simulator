@@ -2,7 +2,7 @@
 
 EMDB splits "the simulator" and "the agent" into two independent ROS 2
 processes that only talk to each other over topics and services. Neither
-`emdb_policy` node imports robosuite/robocasa/MuJoCo — everything
+`emdb_policy` node imports robosuite/robocasa/MuJoCo. Everything
 simulation-specific lives in `emdb_simulator`.
 
 ```text
@@ -29,7 +29,7 @@ simulation-specific lives in `emdb_simulator`.
 
 ## `emdb_interfaces`
 
-An `ament_cmake` package holding only `.msg`/`.srv` definitions — the
+An `ament_cmake` package holding only `.msg`/`.srv` definitions: the
 contract between the other two packages. See {doc}`../interfaces/index` for
 every field.
 
@@ -43,7 +43,7 @@ Owns the actual RoboCasa/robosuite `env`. The core node is
 - builds the robosuite `env` from parameters (`task`, `robot`, `layout_id`,
   `style_id`, `renderer`, ...). Importing `scene_loader` transitively
   imports {py:mod}`emdb_simulator.core.registered_robots` and
-  {py:mod}`emdb_simulator.core.registered_tasks` -- small registry modules
+  {py:mod}`emdb_simulator.core.registered_tasks`, small registry modules
   that each import one module per custom robot/task (starting with
   `robot_loader`'s `UR5eOmron` and `kitchen_lift_task`'s `KitchenLift`),
   registering them with robosuite as a side effect; `robot_loader` in turn
@@ -75,15 +75,15 @@ Owns the actual RoboCasa/robosuite `env`. The core node is
   `/object_states/<object_name>` topic; `mdb` targets the
   [e-MDB cognitive-architecture framework](https://docs.pillar-robots.eu/)'s
   perception convention (a fixed set of `{name, topic, message type}`
-  publishers, one topic per named percept, no bundled arrays) -- it reuses
+  publishers, one topic per named percept, no bundled arrays). It reuses
   `split`'s per-object mechanism but under `/emdb/simulator/sensor/...`
   instead of `/object_states/...`, adds a `std_msgs/Bool` on
   `/emdb/simulator/sensor/<object_name>/grasped` for every object whose cfg
   has `graspable=True` (via `robocasa.utils.object_utils.check_obj_grasped`),
   and publishes task success as a sparse `std_msgs/Float32` "perception" on
   `/emdb/simulator/sensor/progress` (`1.0`/`0.0`, reusing `_check_success()`)
-  rather than only exposing it via `/reward` -- that framework models reward
-  as just another named perception rather than a dedicated channel;
+  rather than only exposing it via `/reward`, since that framework models
+  reward as just another named perception rather than a dedicated channel;
 - optionally renders offscreen and saves one mp4 per episode when
   `record_video:=true` ({py:class}`emdb_simulator.core.video_recorder.VideoRecorder`,
   driven by the episode-reset and per-step hooks), or, with
@@ -123,22 +123,22 @@ Everything here talks to `emdb_simulator` exclusively through the
   teleop), `step_raw()` (a raw native `env.step()` action vector, for
   replaying recorded demos), and `step_vector()` (a flat 7-dim
   `[dx, dy, dz, droll, dpitch, dyaw, gripper]` action, matching a typical
-  robomimic policy's output — gripper is absolute open/closed and gets
+  robomimic policy's output; gripper is absolute open/closed and gets
   translated into the sim's toggle convention internally).
 
 Built on top of `AgentBridge`:
 
-- {py:class}`emdb_policy.gym_env.EmdbGymEnv` — a `gymnasium.Env` (used by
+- {py:class}`emdb_policy.gym_env.EmdbGymEnv`: a `gymnasium.Env` (used by
   `train_sb3`), with a `Box(-1, 1)` action space over the 7-dim vector above
   and an observation space whose shape is discovered from a real `reset()`
   call at construction time (RoboCasa's `obs_dict` layout depends on the
   running task/robot).
-- {py:mod}`emdb_policy.policy_node` — a standalone `PolicyRunner` that swaps
+- {py:mod}`emdb_policy.policy_node`: a standalone `PolicyRunner` that swaps
   in any `policy_fn(obs_dict, rng) -> action_vector` (a random policy by
   default) and drives episodes via `AgentBridge` directly, without gymnasium.
-- {py:mod}`emdb_policy.train_sb3` — trains/continues a Stable-Baselines3 PPO
+- {py:mod}`emdb_policy.train_sb3`: trains/continues a Stable-Baselines3 PPO
   policy against `EmdbGymEnv`.
-- {py:mod}`emdb_policy.replay_demo` — replays a recorded LeRobot-format demo
+- {py:mod}`emdb_policy.replay_demo`: replays a recorded LeRobot-format demo
   episode through `/step_action_raw` as an end-to-end sanity check.
 
 See {doc}`howto/index` for runnable versions of each of these.

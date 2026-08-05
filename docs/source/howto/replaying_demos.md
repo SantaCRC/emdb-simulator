@@ -16,7 +16,7 @@ own `convert_hdf5_lerobot.py` applies when exporting).
 ```{important}
 This is **open-loop** replay: `/reset_episode` reproduces the recorded
 task/robot/layout/style, but not the exact object placement from that
-episode. Don't expect every replayed episode to report success — this tool
+episode. Don't expect every replayed episode to report success: this tool
 checks that actions are applied correctly, not that the task necessarily
 completes.
 ```
@@ -49,5 +49,5 @@ The script prints per-step reward/success/terminated as it goes, and a
 Record teleop demos with `collect_demos:=true` (see {doc}`recording_demos`)
 to get a robomimic-format `demo.hdf5`, then convert it to LeRobot format with
 RoboCasa's own `robocasa/scripts/dataset_scripts/convert_hdf5_lerobot.py`
-(outside the scope of this ROS workspace — see the
+(outside the scope of this ROS workspace, see the
 [robocasa](https://github.com/SantaCRC/robocasa) submodule).

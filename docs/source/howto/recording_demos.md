@@ -18,12 +18,12 @@ Each episode is written to a fresh temp directory
 (`/tmp/emdb_demo_raw_<timestamp>`); this is logged on startup. Then run
 `keyboard_client` (or the `emdb_simulator.launch.py` launch file with
 `teleop:=true`, edited to set `collect_demos:=true`) and teleoperate
-normally — see
+normally. See
 {doc}`teleoperation`.
 
 ```{note}
 An episode only counts as recordable once you've actually reached a resettable
-state — success is determined per-episode from the env's own `state_*.npz`
+state. Success is determined per-episode from the env's own `state_*.npz`
 checkpoints, not from anything you need to signal manually.
 ```
 
@@ -59,7 +59,7 @@ launch, or if no episode has succeeded yet.
 
 ## Next
 
-- {doc}`replaying_demos` — sanity-check the recording by replaying it through
+- {doc}`replaying_demos`: sanity-check the recording by replaying it through
   the ROS RL interface.
-- {doc}`training_rl` — or train directly against the live simulator instead
+- {doc}`training_rl`: or train directly against the live simulator instead
   of from recorded demos.
