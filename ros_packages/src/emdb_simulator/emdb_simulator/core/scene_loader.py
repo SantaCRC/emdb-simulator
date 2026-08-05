@@ -39,6 +39,12 @@ from emdb_interfaces.srv import (
 from emdb_simulator.core import registered_robots  # noqa: F401  registers all custom robots
 from emdb_simulator.core import registered_tasks  # noqa: F401  registers all custom tasks
 from emdb_simulator.core.ros_keyboard_device import ROSKeyboardDevice
+from emdb_simulator.core.camera_config import load_custom_cameras
+from emdb_simulator.core.video_recorder import (
+    EpisodeRecordingSpec,
+    VideoRecorder,
+    save_camera_previews,
+)
 from emdb_interfaces.msg import (
     ObjectState,
     ObjectStateArray,
@@ -67,6 +73,19 @@ class SceneLoader(Node):
         self.declare_parameter("collect_demos", False)
         self.declare_parameter("demo_dir", "/tmp/emdb_demos")
         self.declare_parameter("perception_mode", "unified")
+        self.declare_parameter("record_video", False)
+        self.declare_parameter("record_video_dir", "/tmp/emdb_videos")
+        self.declare_parameter("record_video_episodes", "all")
+        self.declare_parameter("record_video_camera", "robot0_agentview_center")
+        self.declare_parameter("record_video_fps", -1.0)
+        self.declare_parameter("record_video_width", 1280)
+        self.declare_parameter("record_video_height", 720)
+        self.declare_parameter("record_video_stride", 1)
+        self.declare_parameter("record_video_crf", 18)
+        self.declare_parameter("record_video_keep_successes", False)
+        self.declare_parameter("preview_camera", False)
+        self.declare_parameter("preview_camera_names", "all")
+        self.declare_parameter("custom_cameras_file", "")
 
         self.task = self.get_parameter("task").value
         self.robot = self.get_parameter("robot").value
@@ -80,6 +99,45 @@ class SceneLoader(Node):
         self.demo_dir = self.get_parameter("demo_dir").value
         self.demo_tmp_directory = None
         self.env_info = None
+
+        self.record_video = bool(self.get_parameter("record_video").value)
+        self.record_video_dir = self.get_parameter("record_video_dir").value
+        self.record_video_episodes = self.get_parameter("record_video_episodes").value
+        self.record_video_camera = self.get_parameter("record_video_camera").value
+        self.record_video_fps = float(self.get_parameter("record_video_fps").value)
+        self.record_video_width = int(self.get_parameter("record_video_width").value)
+        self.record_video_height = int(self.get_parameter("record_video_height").value)
+        self.record_video_stride = int(self.get_parameter("record_video_stride").value)
+        self.record_video_crf = int(self.get_parameter("record_video_crf").value)
+        self.record_video_keep_successes = bool(
+            self.get_parameter("record_video_keep_successes").value
+        )
+        self.preview_camera = bool(self.get_parameter("preview_camera").value)
+        self.preview_camera_names = self.get_parameter("preview_camera_names").value
+        self.custom_cameras_file = self.get_parameter("custom_cameras_file").value
+        self.custom_cameras = load_custom_cameras(
+            self.custom_cameras_file, logger=self.get_logger()
+        )
+
+        self.video_recorder = VideoRecorder(
+            enabled=self.record_video,
+            output_dir=self.record_video_dir,
+            episode_spec=EpisodeRecordingSpec.parse(
+                self.record_video_episodes, logger=self.get_logger()
+            ),
+            camera_name=self.record_video_camera,
+            width=self.record_video_width,
+            height=self.record_video_height,
+            fps=(
+                self.record_video_fps
+                if self.record_video_fps > 0
+                else self.publish_rate / max(1, self.record_video_stride)
+            ),
+            stride=self.record_video_stride,
+            crf=self.record_video_crf,
+            keep_successes=self.record_video_keep_successes,
+            logger=self.get_logger(),
+        )
 
         # unified: single /object_states with every object (default).
         # grouped: one /object_states/<fixture_name> per fixture objects are placed on/in.
@@ -178,8 +236,17 @@ class SceneLoader(Node):
             f"Scene loaded -> layout={self.current_layout}, style={self.current_style}, "
             f"perception_mode={self.perception_mode}"
         )
+        try:
+            self.get_logger().info(
+                "Available MuJoCo cameras for record_video_camera: "
+                f"{list(self.env.sim.model.camera_names)}"
+            )
+        except Exception:
+            pass
 
-        if self.control_mode == "teleop":
+        if self.preview_camera:
+            self.timer = self.create_timer(0.1, self._run_camera_preview_and_exit)
+        elif self.control_mode == "teleop":
             self.timer = self.create_timer(1.0 / self.publish_rate, self._render_loop)
         else:
             self.timer = None
@@ -217,6 +284,10 @@ class SceneLoader(Node):
             config["translucent_robot"] = False
             config["layout_ids"] = [self.layout_id]
             config["style_ids"] = [self.style_id]
+        if self.task == "KitchenLift":
+            # custom_cameras is a KitchenLift-specific constructor kwarg (see
+            # kitchen_lift_task.py); other Kitchen-family tasks don't accept it.
+            config["custom_cameras"] = self.custom_cameras
 
         self.get_logger().info(
             f"Initializing {'RoboCasa' if self.is_kitchen_task else 'robosuite'} scene..."
@@ -226,7 +297,7 @@ class SceneLoader(Node):
         self.env = robosuite.make(
             **config,
             has_renderer=True,
-            has_offscreen_renderer=False,
+            has_offscreen_renderer=self.record_video or self.preview_camera,
             render_camera=None,
             ignore_done=True,
             use_camera_obs=False,
@@ -252,6 +323,7 @@ class SceneLoader(Node):
             )
 
         self.env.reset()
+        self.video_recorder.maybe_start_episode(self.episode_id)
 
     def _set_layout_style(self):
         if not self.is_kitchen_task:
@@ -338,6 +410,7 @@ class SceneLoader(Node):
             self._init_device()
             self.episode_id += 1
             self.step_id = 0
+            self.video_recorder.maybe_start_episode(self.episode_id)
             response.success = True
             response.message = "Environment reset successfully"
             self.get_logger().info(response.message)
@@ -494,6 +567,7 @@ class SceneLoader(Node):
         self._publish_step_info(reward, terminated=success, truncated=False, success=success)
         self._publish_progress(success)
         self.env.render()
+        self.video_recorder.capture_frame(self.env, success=success)
 
     def _step_action_cb(self, request, response):
         if self.control_mode != "rl":
@@ -564,6 +638,7 @@ class SceneLoader(Node):
 
             self.episode_id += 1
             self.step_id = 0
+            self.video_recorder.maybe_start_episode(self.episode_id)
 
             self._publish_joint_states()
             self._publish_object_states()
@@ -817,6 +892,7 @@ class SceneLoader(Node):
                 self.device.clear_reset()
                 self.episode_id += 1
                 self.step_id = 0
+                self.video_recorder.maybe_start_episode(self.episode_id)
                 return
 
             env_action = self._build_env_action(active_robot, input_ac_dict)
@@ -828,6 +904,7 @@ class SceneLoader(Node):
                 self.device.clear_reset()
                 self.episode_id += 1
                 self.step_id = 0
+                self.video_recorder.maybe_start_episode(self.episode_id)
 
         except Exception as e:
             self.get_logger().error(f"Render / control failed: {e}")
@@ -835,10 +912,41 @@ class SceneLoader(Node):
             self.destroy_node()
             rclpy.shutdown()
 
+    def _resolve_preview_camera_names(self):
+        spec = (self.preview_camera_names or "").strip().lower()
+        if spec in ("", "all", "*"):
+            return list(self.env.sim.model.camera_names)
+        return [name.strip() for name in self.preview_camera_names.split(",") if name.strip()]
+
+    def _run_camera_preview_and_exit(self):
+        self.timer.cancel()
+        try:
+            names = self._resolve_preview_camera_names()
+            saved = save_camera_previews(
+                self.env,
+                names,
+                self.record_video_dir,
+                self.record_video_width,
+                self.record_video_height,
+                logger=self.get_logger(),
+            )
+            self.get_logger().info(f"Camera preview saved {len(saved)} image(s): {saved}")
+        except Exception as e:
+            self.get_logger().error(f"Camera preview failed: {e}")
+            self.get_logger().error(traceback.format_exc())
+        finally:
+            self.destroy_node()
+            rclpy.shutdown()
+
     def destroy_node(self):
         if self.env is not None:
             try:
                 self.env.close()
+            except Exception:
+                pass
+        if getattr(self, "video_recorder", None) is not None:
+            try:
+                self.video_recorder.close()
             except Exception:
                 pass
         super().destroy_node()

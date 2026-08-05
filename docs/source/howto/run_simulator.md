@@ -32,6 +32,19 @@ ros2 run emdb_simulator scene_loader --ros-args \
 | `collect_demos` | `false` | Record every teleop episode to a temp dir via robosuite's `DataCollectionWrapper`; see {doc}`recording_demos`. |
 | `demo_dir` | `/tmp/emdb_demos` | Default output directory for `/save_demos` when the request doesn't specify `out_dir`. |
 | `perception_mode` | `unified` | How object perceptions are published: `unified` (single `/object_states` topic with every object), `grouped` (one `/object_states/<fixture_name>` per fixture objects are placed on/in), `split` (one `/object_states/<object_name>` per object), or `mdb` (e-MDB-cognitive-architecture-compatible: per-object topics under `/emdb/simulator/sensor/...` plus a `.../grasped` fact per graspable object and a sparse `.../progress` signal). See {doc}`../architecture`. Fixed for the node's lifetime -- restart to change it. |
+| `record_video` | `false` | Enable per-episode offscreen mp4 recording. See {doc}`recording_video`. |
+| `record_video_dir` | `/tmp/emdb_videos` | Parent directory for recorded episode videos and camera previews. |
+| `record_video_episodes` | `all` | Which episodes to record: `all`, a single id (`5`), or comma-separated ids/ranges (`0-2,10-12`). |
+| `record_video_camera` | `robot0_agentview_center` | Fixed MuJoCo camera name used for offscreen video recording. |
+| `record_video_fps` | `-1.0` | Output video fps; `-1` = auto (`publish_rate / record_video_stride`). |
+| `record_video_width` | `1280` | Recording frame width, in pixels. |
+| `record_video_height` | `720` | Recording frame height, in pixels. |
+| `record_video_stride` | `1` | Capture every Nth simulation step (`1` = every step). |
+| `record_video_crf` | `18` | libx264 CRF quality (`0`=lossless, `18`=near-lossless, `23`=default, `51`=worst). |
+| `record_video_keep_successes` | `false` | Also keep any episode where the task succeeds, even outside `record_video_episodes`. See {doc}`recording_video` for the cost tradeoff. |
+| `preview_camera` | `false` | Debug dry-run: build the scene, save one PNG per camera under `record_video_dir`, log available camera names, then exit -- no episode is stepped. Ignores `control_mode`/teleop. |
+| `preview_camera_names` | `all` | Cameras to preview: `all` or a comma-separated list of camera names. |
+| `custom_cameras_file` | `""` | Path to a YAML file defining extra cameras. Empty = none. Only applied for `task=KitchenLift`. See {doc}`recording_video`. |
 
 ## Via the provided launch files
 

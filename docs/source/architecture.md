@@ -84,6 +84,18 @@ Owns the actual RoboCasa/robosuite `env`. The core node is
   `/emdb/simulator/sensor/progress` (`1.0`/`0.0`, reusing `_check_success()`)
   rather than only exposing it via `/reward` -- that framework models reward
   as just another named perception rather than a dedicated channel;
+- optionally renders offscreen and saves one mp4 per episode when
+  `record_video:=true` ({py:class}`emdb_simulator.core.video_recorder.VideoRecorder`,
+  driven by the episode-reset and per-step hooks), or, with
+  `preview_camera:=true`, short-circuits into a one-shot dry run that saves
+  a still PNG per camera and exits without stepping an episode
+  ({py:func}`emdb_simulator.core.video_recorder.save_camera_previews`).
+  `custom_cameras_file` (`task=KitchenLift` only) loads extra MuJoCo cameras
+  from a YAML file via
+  {py:func}`emdb_simulator.core.camera_config.load_custom_cameras` and
+  appends them to the compiled model in `KitchenLift._load_model`. Offscreen
+  rendering (`has_offscreen_renderer`) is only enabled when one of these two
+  features is. See {doc}`howto/recording_video`;
 - optionally records every teleop episode to disk when `collect_demos:=true`
   (via robosuite's `DataCollectionWrapper`), and consolidates the successful
   ones into a robomimic-format `demo.hdf5` on `/save_demos`.

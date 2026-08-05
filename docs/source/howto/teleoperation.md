@@ -25,7 +25,7 @@ window works, but only the process that has focus will feel responsive.
 | Keys | Action |
 |---|---|
 | Arrow keys | Move end-effector in X/Y |
-| `.` / `;` | Move end-effector down / up (Z) |
+| Shift+↓ / Shift+↑ | Move end-effector down / up (Z) |
 | `e` / `r` | Roll +/- |
 | `y` / `h` | Pitch +/- |
 | `p` / `o` | Yaw +/- |

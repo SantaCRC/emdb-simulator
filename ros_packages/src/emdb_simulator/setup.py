@@ -50,6 +50,10 @@ setup(
             glob('config/objects/*.yaml')
         ),
         (
+            os.path.join('share', package_name, 'config', 'cameras'),
+            glob('config/cameras/*.yaml')
+        ),
+        (
             os.path.join('share', package_name, 'assets', 'grippers', 'twofg7_gripper'),
             glob('assets/grippers/twofg7_gripper/*.xml')
         ),

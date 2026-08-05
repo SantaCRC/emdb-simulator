@@ -109,6 +109,34 @@ layouts/styles, with robosuite as an import side effect; imported by
    :show-inheritance:
 ```
 
+## `emdb_simulator.core.camera_config`
+
+Loads and validates user-defined custom MuJoCo cameras from the
+`custom_cameras_file` YAML parameter (`load_custom_cameras`), resolving a
+friendlier `lookat` point into the raw MuJoCo camera quaternion when given.
+See {doc}`../howto/recording_video`.
+
+```{eval-rst}
+.. automodule:: emdb_simulator.core.camera_config
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+## `emdb_simulator.core.video_recorder`
+
+Per-episode offscreen mp4 recording (`EpisodeRecordingSpec`,
+`VideoRecorder`) and the standalone camera-preview helper
+(`save_camera_previews`) driven by `scene_loader`'s `record_video`/
+`preview_camera` parameters. See {doc}`../howto/recording_video`.
+
+```{eval-rst}
+.. automodule:: emdb_simulator.core.video_recorder
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
 ## `emdb_simulator.core.position_server`
 
 Console script: `position_server`. Minimal example

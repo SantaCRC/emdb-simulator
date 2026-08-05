@@ -4,6 +4,7 @@
 
 ```text
 emdb_simulator/
+├── mdb_experiments/          # e-MDB experiment config templates (not yet wired to any code)
 ├── misc/                     # git submodules + helper scripts
 │   ├── robosuite/            # SantaCRC/robosuite fork
 │   ├── robocasa/             # SantaCRC/robocasa fork
