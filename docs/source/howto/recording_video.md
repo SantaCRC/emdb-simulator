@@ -109,6 +109,79 @@ load; a camera `name` that collides with an existing one (built-in or
 another custom entry) simply overwrites its pose. Always `preview_camera`
 after adding/editing an entry to confirm it frames what you expect.
 
+## 4. Headless example: specific episodes + keep-successes + e-MDB perception
+
+A worked example combining everything above for a non-interactive,
+headless run: record episodes `0`-`4` explicitly, *also* keep any later
+episode that succeeds, publish the e-MDB-compatible perception topics
+(`perception_mode:=mdb`, see {doc}`../architecture`), and use the custom
+rear camera from section 3 above.
+
+```{important}
+**Headless needs `xvfb-run`, not just EGL.** `MUJOCO_GL=egl` (set by
+`env.sh`) already makes the actual frame rendering happen offscreen via
+EGL, with no GPU display window and no `DISPLAY` required for that part.
+But `scene_loader` unconditionally imports
+`robocasa.wrappers.enclosing_wall_render_wrapper`, which imports
+`pynput.keyboard` at module level regardless of `control_mode` -- and
+`pynput`'s X11 backend raises `ImportError: this platform is not
+supported ... failed to acquire X connection` if there's no X server to
+connect to at all, even though nothing ever listens for keys in `rl` mode.
+Wrapping the launch in `xvfb-run` gives `pynput` a real (virtual) X
+connection to import against, so the node starts cleanly on a machine
+with no monitor attached. Confirmed by running this exact command with
+`DISPLAY` unset: it fails without `xvfb-run`, and works with it.
+```
+
+```bash
+source env.sh
+xvfb-run -a ros2 launch emdb_simulator emdb_simulator.launch.py \
+  perception_mode:=mdb \
+  record_video:=true \
+  record_video_episodes:=0-4 \
+  record_video_keep_successes:=true \
+  record_video_camera:=robot0_agentview_center_rear \
+  custom_cameras_file:="$(pwd)/ros_packages/src/emdb_simulator/config/cameras/example_custom_cameras.yaml" \
+  record_video_dir:=/tmp/emdb_videos
+```
+
+| Parameter/flag | Value here | Why |
+|---|---|---|
+| `xvfb-run -a` | -- | Not a ROS param -- wraps the process in a virtual X server so `pynput`'s import succeeds with no real display attached (see above). `-a` picks a free virtual display number automatically. |
+| `perception_mode` | `mdb` | The e-MDB-cognitive-architecture perception layout: per-object topics under `/emdb/simulator/sensor/...` (here, `/emdb/simulator/sensor/obj`, since `KitchenLift`'s object is named `"obj"`), a `.../grasped` `std_msgs/Bool` for it, and task success as `.../progress` (`std_msgs/Float32`) -- reward modeled as just another perception rather than a dedicated channel. See {doc}`../architecture`. |
+| `record_video` | `true` | Turns on per-episode offscreen mp4 recording (and `has_offscreen_renderer`). |
+| `record_video_episodes` | `0-4` | Explicitly records (and always keeps) episodes `0` through `4` -- the "specific iterations" ask. Unquoted ranges/lists like this parse fine on the CLI; only a *single bare integer* (e.g. `0`) needs the `:="'0'"` string-literal trick to stop ROS inferring an int-typed parameter, since this one is a string param. |
+| `record_video_keep_successes` | `true` | The "in case of success" ask: any episode *outside* `0-4` is still recorded, but only kept on disk if `_check_success()` fires before it ends -- otherwise deleted right after. Episodes `0`-`4` are kept unconditionally either way. Costs more (every episode gets recorded while this is on), so only turn it on when you actually want to catch successes past the explicit range. |
+| `record_video_camera` | `robot0_agentview_center_rear` | The custom rear-view camera from section 3, parented to `mobilebase0_support` so it follows the robot. |
+| `custom_cameras_file` | `config/cameras/example_custom_cameras.yaml` | Required here -- `robot0_agentview_center_rear` isn't a built-in camera, it only exists once this file is loaded (and only for `task:=KitchenLift`, this launch file's default task). |
+| `record_video_dir` | `/tmp/emdb_videos` | Shown explicitly for clarity; it's already the default. Videos land at `record_video_dir/run_<timestamp>/episode_NNNN.mp4`. |
+| `control_mode` (not passed) | stays `rl` | This launch file derives `control_mode` from the `teleop` argument (`teleop:=false` by default -> `rl`); there's no direct `control_mode:=` launch argument. `rl` is the right choice for a headless/scripted run since nothing needs a keyboard -- physics only advances on `/step_action`/`/step_action_raw` calls (see next). |
+
+Since this stays in `rl` mode, something still has to call `/step_action`
+to actually advance episodes -- either `emdb_policy` (see
+{doc}`training_rl`), or, for a quick smoke test, a manual loop:
+
+```bash
+for i in $(seq 1 10); do
+  ros2 service call /step_action emdb_interfaces/srv/StepAction "{dz: 0.02}"
+done
+ros2 service call /reset_episode emdb_interfaces/srv/ResetEpisode "{layout_id: -1, style_id: -1}"
+```
+
+Stop the node with **Ctrl+C**/`SIGINT` when done -- that's what flushes and
+closes whichever episode's mp4 is still open.
+
+```{note}
+On this kind of headless/EGL setup, `SIGINT` can make the process report a
+nonzero/segfault-looking exit *after* it has already finished shutting
+down cleanly at the Python level -- a native MuJoCo/EGL teardown quirk
+during interpreter exit, not data loss. Verified with `ffprobe`: episode
+files already being recorded at the time of `SIGINT` were complete and
+playable regardless. If you automate this, don't treat a nonzero exit
+code alone as proof the run failed -- check for the expected
+`episode_NNNN.mp4` files instead.
+```
+
 ## Next
 
 - {doc}`run_simulator` — the full simulator parameter table.
