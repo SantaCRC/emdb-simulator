@@ -1,0 +1,52 @@
+# Example custom-camera definitions, loaded via the `custom_cameras_file`
+# ROS parameter (see launch/emdb_simulator.launch.py). Copy/adapt this file
+# for your own scene -- use `preview_camera:=true` to check placement
+# before recording a real episode.
+#
+# Each entry needs:
+#   name   -- becomes a normal MuJoCo camera name, selectable via
+#             record_video_camera / preview_camera_names just like the
+#             built-in ones (agentview, robot0_agentview_center, ...).
+#   pos    -- [x, y, z] position, in meters. World coordinates, UNLESS
+#             parent_body is set (see below), in which case it's in that
+#             body's own local frame.
+#   EITHER
+#     lookat -- [x, y, z] point to aim the camera at, in the same frame as
+#               pos (world, or local if parent_body is set). up defaults
+#               to that frame's +Z; override with an optional
+#               `up: [x, y, z]`.
+#   OR
+#     quat   -- raw MuJoCo camera quaternion, (w, x, y, z), also in the
+#               same frame as pos.
+#   fovy   -- optional, vertical field of view in degrees.
+#   parent_body -- optional MuJoCo body name (e.g. "mobilebase0_support").
+#             Attaches the camera to that body instead of the world, so it
+#             moves with the robot across layouts/episodes instead of
+#             staying at a fixed world position. Skipped with a warning if
+#             the named body doesn't exist on the configured robot.
+#
+# If both quat and lookat are given, quat wins. If a name collides with an
+# existing camera (built-in or another entry), this overwrites its pose.
+
+cameras:
+  - name: top_down
+    pos: [0.0, -1.0, 2.5]
+    lookat: [0.0, -1.0, 0.9]
+    fovy: 45
+
+  - name: side_view
+    pos: [1.8, -1.8, 1.3]
+    quat: [0.653, 0.271, 0.271, 0.653]
+
+  # A "rear view" of the robot, mirroring the default robot0_agentview_center
+  # (which is parented to mobilebase0_support, pos [-0.6, 0, 1.15]) but from
+  # the opposite side and pulled back a bit further so the whole robot fits
+  # in frame -- a naive 180deg mirror of that camera's own pose ends up
+  # aimed at the mirror image of its workspace, not centered on the robot,
+  # since the default isn't actually looking at the robot itself. This is a
+  # starting point, not a final answer: preview it and adjust pos/lookat
+  # until it frames the robot the way you want.
+  - name: robot0_agentview_center_rear
+    parent_body: mobilebase0_support
+    pos: [3.0, 0.0, 1.8]
+    lookat: [0.0, 0.0, 0.5]
