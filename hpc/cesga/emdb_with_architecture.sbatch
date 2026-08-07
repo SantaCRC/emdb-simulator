@@ -22,9 +22,10 @@
 #SBATCH --time=00:15:00
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
-#SBATCH --partition=<CESGA_CPU_PARTITION>
-# ^ PLACEHOLDER: fill in with an actual FinisTerraeIII CPU partition name
-#   (check `sinfo`/`scontrol show partition`) before submitting.
+#SBATCH --partition=short
+# ^ FinisTerraeIII's default partition (6h limit, ample idle capacity per
+#   `sinfo`) -- plenty for this 15-minute connectivity check. Use `medium`
+#   (3-day limit) or longer instead if you raise --time for a real run.
 
 VARIANT=cpu
 source "$(dirname "$0")/_common.sh"

@@ -11,10 +11,11 @@
 #SBATCH --time=48:00:00
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
-#SBATCH --partition=<CESGA_CPU_PARTITION>
-# ^ PLACEHOLDER: fill in with an actual FinisTerraeIII CPU partition name
-#   (check `sinfo`/`scontrol show partition` on the cluster, or CESGA's
-#   FT3 user guide) before submitting -- this repo doesn't have that info.
+#SBATCH --partition=medium
+# ^ `medium`'s 3-day limit comfortably covers this job's 48h --time (per
+#   `sinfo`, FT3's `short` default only allows 6h). Drop to `short` (and a
+#   shorter --time) for quick smoke tests, or `long`/`ondemand` for
+#   multi-day runs beyond medium's 3-day cap.
 
 VARIANT=cpu
 source "$(dirname "$0")/_common.sh"

@@ -11,12 +11,13 @@
 #SBATCH --time=48:00:00
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
-#SBATCH --partition=<CESGA_GPU_PARTITION>
-#SBATCH --gres=gpu:1
-# ^ PLACEHOLDERS: fill in an actual FinisTerraeIII GPU partition name and
-#   confirm the --gres=gpu:... syntax (check `sinfo`/`scontrol show
-#   partition`, or CESGA's FT3 user guide) before submitting -- this repo
-#   doesn't have that info.
+#SBATCH --partition=medium
+#SBATCH --gres=gpu:a100:1
+# ^ Per `sinfo`, FT3's GPUs (a100 nodes) are scheduled via --gres within
+#   the same shared partitions as CPU jobs, not a dedicated GPU partition.
+#   `medium`'s 3-day limit comfortably covers this job's 48h --time (the
+#   `short` default only allows 6h). Drop to `short` (shorter --time) for
+#   quick smoke tests, or `long`/`ondemand` for multi-day runs.
 
 VARIANT=gpu
 source "$(dirname "$0")/_common.sh"

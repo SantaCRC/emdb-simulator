@@ -152,12 +152,14 @@ the command line if you used different locations:
 HOST_WORKSPACE=$HOME/some_other_checkout sbatch hpc/cesga/emdb_simulator_cpu.sbatch
 ```
 
-```{important}
-Both `.sbatch` files ship with **placeholder** `#SBATCH --partition=...`
-values (and `--gres=gpu:1` for the GPU one) -- fill these in with
-FinisTerraeIII's actual partition names before submitting (check `sinfo` /
-`scontrol show partition`, or CESGA's FT3 user guide). This repo doesn't
-have that information baked in.
+```{note}
+Both `.sbatch` files target FinisTerraeIII's `medium` partition (3-day
+limit, comfortably covers the 48h `--time` both request; the `short`
+default partition only allows 6h) — the GPU one requests
+`--gres=gpu:a100:1`, since FT3's A100 GPUs are scheduled via `--gres`
+within the same shared partitions as CPU jobs, not a dedicated GPU
+partition (per `sinfo`). Adjust `--partition`/`--time`/`--gres` to taste
+for shorter smoke tests or different node counts.
 ```
 
 Each SLURM array task's `$SLURM_ARRAY_TASK_ID` varies `layout_id`/
