@@ -108,8 +108,13 @@ singularity exec \
      ros2 launch $ARCH_PACKAGE $ARCH_LAUNCH_FILE" &
 ARCH_PID=$!
 
-# Let both ROS graphs come up before checking.
-sleep 20
+# Let both ROS graphs come up before checking. 20s wasn't enough in
+# practice on this cluster: FUSE isn't available (both containers fall back
+# to fully extracting into a temp sandbox, see docker/entrypoint.sh's
+# header comment on this), and the simulator side rebuilds ros_packages
+# from scratch every run on top of that -- both eat real wall-clock time
+# before either side's nodes actually come up.
+sleep 90
 
 # Plumbing check: confirm the simulator's nodes/topics are visible from
 # inside the architecture container, proving DDS discovery works across the
