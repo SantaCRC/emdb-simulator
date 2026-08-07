@@ -81,6 +81,16 @@ cd "$REPO_ROOT"
 # the way through from ENTRYPOINT) -- a well-known Docker/xvfb-run
 # interaction. Starting Xvfb directly and polling for its socket file
 # sidesteps that signal-delivery quirk entirely.
+#
+# mkdir /tmp/.X11-unix ourselves first: Xvfb refuses to create it itself
+# when not running as root ("euid != 0, directory /tmp/.X11-unix will not
+# be created" -- an intentional X11 safeguard against socket hijacking),
+# which is exactly our case under unprivileged Singularity on CESGA (Docker
+# locally runs as root, where this was never an issue). Creating it
+# ourselves as the same non-root user first is fine -- the restriction is
+# specifically about Xvfb creating it, not about using one that already
+# exists with the right permissions.
+mkdir -p -m 1777 /tmp/.X11-unix
 export DISPLAY="${DISPLAY:-:99}"
 Xvfb "$DISPLAY" -screen 0 1280x1024x24 -nolisten tcp &
 tries=50

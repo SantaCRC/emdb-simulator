@@ -259,11 +259,20 @@ static peer list) that hasn't been built or tested here.
 The architecture side needs its own **already-built** ROS workspace
 (`install/setup.bash` present) bind-mounted in read-only, matching the
 standalone architecture sbatch workflow's own pattern -- the image itself
-doesn't bake in `experiments`/`bartender_launch.py`, only ROS + Python
-deps. Defaults to `$HOME/emdb_develop` (`ARCH_HOST_WORKSPACE` to override);
-build it there first (`colcon build`) if it isn't already. The launch
-command itself defaults to `ros2 launch experiments bartender_launch.py`
+doesn't bake in `experiments`/`sim2D_launch.py`, only ROS + Python deps.
+Defaults to `$HOME/emdb_develop` (`ARCH_HOST_WORKSPACE` to override); build
+it there first (`colcon build`) if it isn't already. The launch command
+itself defaults to `ros2 launch experiments sim2D_launch.py`
 (`ARCH_PACKAGE`/`ARCH_LAUNCH_FILE` to override).
+```
+
+```{note}
+`sim2D_launch.py`, not `bartender_launch.py` -- `bartender_launch.py` also
+launches the architecture's own bundled discrete-event simulator under the
+same `/emdb/simulator/sensor/...` prefix this repo's `mdb` perception mode
+uses, which collides with (and drowns out) this simulator's own topics in
+any visibility check. `sim2D_launch.py`'s bundled 2D reference simulator
+publishes under `/mdb/baxter/sensor/...` instead, so it doesn't collide.
 ```
 
 ```{note}

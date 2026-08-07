@@ -63,18 +63,32 @@ cleanup() {
 trap cleanup EXIT
 
 # --- Simulator side (this repo's image) -------------------------------
+# perception_mode:=mdb publishes the e-MDB-compatible perception topics
+# (/emdb/simulator/sensor/...); record_video:=true renders per-episode mp4s
+# for offline debugging, since this whole thing is headless -- no live
+# view, Xvfb is a virtual/software-only X server, not a real display (see
+# docker/entrypoint.sh's header comment).
 singularity exec "${BIND_ARGS[@]}" \
     "$SIF" /opt/emdb/entrypoint.sh \
     ros2 launch emdb_simulator emdb_simulator.launch.py \
-        perception_mode:=mdb &
+        perception_mode:=mdb \
+        record_video:=true \
+        record_video_dir:="$OUT_DIR/videos" &
 SIM_PID=$!
 
 # --- Architecture side --------------------------------------------------
+# sim2D_launch.py (the "known-working reference" experiment, per
+# ws_bartender's own sim_2d_emdb package), NOT bartender_launch.py --
+# bartender_launch.py also spins up the architecture's own bundled
+# discrete-event simulator under the SAME /emdb/simulator/sensor/... prefix
+# this repo's simulator uses, which collides with (and drowns out) ours in
+# any topic-visibility check. sim2D_launch.py's own bundled 2D simulator
+# publishes under /mdb/baxter/sensor/... instead, so it doesn't collide.
+#
 # Matches the standalone architecture sbatch workflow's own pattern: source
 # ROS, use an already-built workspace (install/setup.bash present -- no
-# clone/colcon-build here, unlike that script's from-scratch fallback path),
-# run `ros2 launch experiments bartender_launch.py`. Override
-# ARCH_PACKAGE/ARCH_LAUNCH_FILE for a different experiment, and
+# clone/colcon-build here, unlike that script's from-scratch fallback path).
+# Override ARCH_PACKAGE/ARCH_LAUNCH_FILE for a different experiment, and
 # ARCH_HOST_WORKSPACE if your built checkout lives somewhere other than the
 # default (matches that script's own HOST_WORKSPACE default).
 ARCH_HOST_WORKSPACE="${ARCH_HOST_WORKSPACE:-$HOME/emdb_develop}"
@@ -85,7 +99,7 @@ if [ ! -f "$ARCH_HOST_WORKSPACE/install/setup.bash" ]; then
     exit 1
 fi
 ARCH_PACKAGE="${ARCH_PACKAGE:-experiments}"
-ARCH_LAUNCH_FILE="${ARCH_LAUNCH_FILE:-bartender_launch.py}"
+ARCH_LAUNCH_FILE="${ARCH_LAUNCH_FILE:-sim2D_launch.py}"
 singularity exec \
     --bind "$ARCH_HOST_WORKSPACE:/workspace/emdb_develop:ro" \
     "$ARCH_SIF" bash -c \
@@ -107,4 +121,10 @@ singularity exec "$ARCH_SIF" \
     > "$OUT_DIR/plumbing_check.log" 2>&1
 
 echo "Plumbing check written to $OUT_DIR/plumbing_check.log"
-wait "$SIM_PID" "$ARCH_PID"
+
+# Don't `wait` for either process -- the architecture side is a real
+# cognitive-architecture experiment that runs indefinitely by design, so
+# waiting on it would just block until this job's --time limit kills
+# everything anyway. The plumbing check above is the actual deliverable;
+# `cleanup` (EXIT trap) kills both backgrounded containers now that it's
+# written.
