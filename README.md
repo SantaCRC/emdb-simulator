@@ -28,6 +28,8 @@ TFM/
 │       ├── emdb_interfaces/  # custom msg/srv definitions (ament_cmake)
 │       ├── emdb_simulator/   # simulator node, scene/robot/gripper loaders (ament_python)
 │       └── emdb_policy/      # RL/policy node, gym wrapper, training (ament_python)
+├── docker/                   # Dockerfiles (CPU/GPU) for CESGA/Singularity use
+├── hpc/cesga/                # SLURM job scripts for running on CESGA
 ├── docs/                     # Sphinx documentation
 ├── setup.sh                  # one-time (idempotent) workspace setup
 └── env.sh                    # source this in every new terminal
@@ -127,6 +129,10 @@ See [`docs/source/howto/run_simulator.md`](docs/source/howto/run_simulator.md)
 for parameters, launch files, and topics, and the rest of
 [`docs/source/howto/`](docs/source/howto/index.md) for teleoperation, demo
 recording, RL training, and demo replay guides.
+
+To run experiments on CESGA's FinisTerraeIII HPC cluster via
+Docker/Singularity/SLURM instead, see
+[`docs/source/howto/running_on_cesga.md`](docs/source/howto/running_on_cesga.md).
 
 ## Building the documentation
 

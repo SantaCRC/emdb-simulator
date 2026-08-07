@@ -14,6 +14,7 @@ training_rl
 replaying_demos
 creating_tasks
 managing_robots
+running_on_cesga
 ```
 
 | I want to... | Guide |
@@ -25,3 +26,4 @@ managing_robots
 | Sanity-check a recorded demo against the ROS interface | {doc}`replaying_demos` |
 | Add a new task without writing robosuite code | {doc}`creating_tasks` |
 | View, tweak, or create a robot | {doc}`managing_robots` |
+| Run experiments on CESGA's FinisTerraeIII HPC cluster | {doc}`running_on_cesga` |

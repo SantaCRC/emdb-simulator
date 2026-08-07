@@ -1,0 +1,144 @@
+# CPU-only image for running the emdb-simulator workspace headlessly, e.g.
+# via Singularity on CESGA (see docs/source/howto/running_on_cesga.md).
+# Published as santacrc/emdb_simulator_cpu by .github/workflows/docker.yml.
+#
+# Build from the REPO ROOT (not this docker/ directory), with submodules
+# already checked out:
+#   git submodule update --init --recursive
+#   docker build -f docker/Dockerfile.cpu -t santacrc/emdb_simulator_cpu:latest .
+#
+# RoboCasa's ~10GB kitchen assets are intentionally NOT downloaded here --
+# they're bind-mounted in at `singularity exec`/`docker run` time from a
+# shared location (see the "Asset mount point" step below and
+# docs/source/howto/running_on_cesga.md), so this image builds fast and
+# stays small, and many parallel job instances can share one asset copy
+# instead of each holding/downloading their own.
+
+FROM ros:humble-ros-base
+
+# Docker's default RUN shell is /bin/sh (dash), but ROS's setup.bash uses
+# bash-only syntax (${BASH_SOURCE}, etc.) -- switch the default so any RUN
+# that sources it (see the colcon build step below) doesn't hit "Bad
+# substitution".
+SHELL ["/bin/bash", "-c"]
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    LANG=en_US.UTF-8
+
+# ---------------------------------------------------------------------------
+# 1. System packages.
+#    - xvfb: scene_loader unconditionally imports robocasa's
+#      enclosing_wall_render_wrapper -> pynput.keyboard at module level,
+#      which needs a real/virtual X connection even in headless `rl` mode
+#      with no GUI (see docs/source/howto/recording_video.md, section 4).
+#      docker/entrypoint.sh wraps every command in xvfb-run so callers never
+#      have to remember this themselves.
+#    - libosmesa6(-dev)/libgl1/libglx-mesa0: MUJOCO_GL=osmesa software
+#      rendering backend (no GPU on this variant -- see Dockerfile.gpu for
+#      the EGL/--nv equivalent).
+#    - ffmpeg: imageio's video-writing backend (emdb_simulator's
+#      video_recorder.py encodes with libx264 via imageio).
+#    - ros-humble-ament-cmake: ros:humble-ros-base is runtime-only and does
+#      NOT include this, but emdb_interfaces (ament_cmake build type, see
+#      ros_packages/src/emdb_interfaces/CMakeLists.txt) needs it to build.
+#    - ros-humble-rmw-cyclonedds-cpp: env.sh/entrypoint.sh default
+#      RMW_IMPLEMENTATION to rmw_cyclonedds_cpp, but ros:humble-ros-base only
+#      ships the default rmw_fastrtps_cpp -- without this package, every
+#      ros2/rclpy call fails at startup with "RMW implementation not
+#      installed".
+# ---------------------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3-venv \
+        python3-pip \
+        git \
+        build-essential \
+        curl \
+        xvfb \
+        libosmesa6 \
+        libosmesa6-dev \
+        libgl1 \
+        libglx-mesa0 \
+        ffmpeg \
+        python3-rosdep \
+        ros-humble-ament-cmake \
+        ros-humble-rmw-cyclonedds-cpp \
+    && rm -rf /var/lib/apt/lists/*
+
+# rosdep is pre-initialized on ros:humble-ros-base's build, but the sources
+# list isn't always present in every published tag; make this idempotent.
+RUN [ -f /etc/ros/rosdep/sources.list.d/20-default.list ] || rosdep init; \
+    rosdep update
+
+WORKDIR /opt/emdb
+COPY . .
+
+# ---------------------------------------------------------------------------
+# 2. Python virtualenv (mirrors setup.sh step 3: --system-site-packages so
+#    colcon/rosidl's apt-installed toolchain, e.g. `lark`, stays visible).
+# ---------------------------------------------------------------------------
+RUN python3 -m venv --system-site-packages /opt/emdb/.venv
+ENV PATH="/opt/emdb/.venv/bin:${PATH}"
+RUN pip install --upgrade pip wheel setuptools
+
+# ---------------------------------------------------------------------------
+# 3. CPU-only torch pin. robocasa depends on lerobot==0.3.3, which otherwise
+#    pulls torch's default CUDA build (multiple GB of unneeded nvidia-*-cu12
+#    wheels on a CPU-only image). Same fix as .github/workflows/docs.yml.
+# ---------------------------------------------------------------------------
+RUN pip install torch==2.7.1+cpu torchvision==0.22.1+cpu \
+        --index-url https://download.pytorch.org/whl/cpu
+
+# ---------------------------------------------------------------------------
+# 4. robosuite / robocasa / (optional) robosuite_models, editable installs.
+# ---------------------------------------------------------------------------
+RUN pip install -e misc/robosuite -e misc/robocasa
+RUN if [ -n "$(ls -A misc/robosuite_models 2>/dev/null)" ]; then \
+        pip install -e misc/robosuite_models || \
+            echo "robosuite_models install failed (optional) -- continuing"; \
+    else \
+        echo "misc/robosuite_models is empty, skipping (optional)"; \
+    fi
+
+# colcon must be importable via the venv's python; empy pinned to 3.3.4 for
+# ROS 2 Humble's rosidl_adapter (same as setup.sh).
+RUN pip install colcon-common-extensions "empy==3.3.4"
+
+RUN rosdep install --from-paths /opt/emdb/ros_packages/src --ignore-src -r -y
+
+# ---------------------------------------------------------------------------
+# 5. Asset mount point (no download here -- see file header comment).
+#    This is exactly the directory DOWNLOAD_ASSET_REGISTRY in
+#    misc/robocasa/robocasa/scripts/download_kitchen_assets.py populates
+#    (textures, generative_textures, fixtures, objects/{objaverse,aigen_objs,
+#    lightwheel} all live under this one folder). `pip install -e` above
+#    makes robocasa.__path__[0] point at this in-image source tree, so a
+#    single bind mount here at run time supplies every asset type at once.
+#    The directory must exist now -- Singularity can't mkdir onto a
+#    read-only SIF at runtime.
+# ---------------------------------------------------------------------------
+RUN mkdir -p misc/robocasa/robocasa/models/assets
+
+# ---------------------------------------------------------------------------
+# 6. Build the ROS 2 workspace. This bakes a self-contained image usable
+#    with zero bind mounts (e.g. for CI/local smoke tests, minus real
+#    kitchen scenes which need the asset bind mount). On CESGA, ros_packages/
+#    is typically bind-mounted live over this from $HOST_WORKSPACE, and
+#    entrypoint.sh rebuilds it automatically if it looks newer than this
+#    baked copy.
+#    ENTRYPOINT (which sources ROS's setup.bash, see entrypoint.sh) only
+#    runs at `docker run`/`singularity exec` time, NOT during `docker
+#    build`'s RUN steps -- source it explicitly here too, or colcon's
+#    CMake-based packages (emdb_interfaces) fail with "could not find
+#    ament_cmake" (CMAKE_PREFIX_PATH unset).
+# ---------------------------------------------------------------------------
+RUN . /opt/ros/humble/setup.bash && \
+    cd ros_packages && python -m colcon build --symlink-install
+
+COPY docker/entrypoint.sh /opt/emdb/entrypoint.sh
+RUN chmod +x /opt/emdb/entrypoint.sh
+
+ENV MUJOCO_GL=osmesa \
+    RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+
+ENTRYPOINT ["/opt/emdb/entrypoint.sh"]
+CMD ["bash"]

@@ -1,0 +1,48 @@
+# Build context for docker/Dockerfile.cpu and docker/Dockerfile.gpu is the
+# repo root (they need ros_packages/, misc/robosuite, misc/robocasa,
+# misc/robosuite_models). This trims everything else that isn't needed
+# inside the image and would otherwise bloat the build context upload.
+#
+# Do NOT exclude misc/robosuite, misc/robocasa, or misc/robosuite_models
+# themselves -- the Dockerfiles `pip install -e` them, so they must be
+# present in the build context. Their large *downloaded data* subdirectories
+# (RoboCasa's kitchen assets, its demo dataset cache) are excluded further
+# below instead, since those are bind-mounted in at singularity/docker run
+# time rather than baked into the image -- see
+# docs/source/howto/running_on_cesga.md.
+
+.git
+.gitmodules
+
+.venv/
+ros_packages/build/
+ros_packages/install/
+ros_packages/log/
+
+docs/build/
+docs/_build/
+
+**/__pycache__/
+*.pyc
+*.pyo
+
+MUJOCO_LOG.TXT
+.vscode/
+
+# RoboCasa kitchen assets are intentionally NOT baked into the image (see
+# docker/Dockerfile.cpu's header comment) -- bind-mounted in at run time
+# instead. A *fresh* submodule checkout (CI) never has these populated, but
+# a LOCAL `docker build` on a machine that already ran ./setup.sh will have
+# ~10-25GB sitting under these paths; exclude them explicitly so a local
+# build doesn't transfer all of it into the build context every time.
+misc/robocasa/robocasa/models/assets/textures/
+misc/robocasa/robocasa/models/assets/generative_textures/
+misc/robocasa/robocasa/models/assets/fixtures/
+misc/robocasa/robocasa/models/assets/objects/
+# Local-only asset mirror some dev workflows populate under the ROS
+# package itself (untracked by git; emdb_simulator's setup.py data_files
+# only need assets/grippers/, not assets/robocasa/).
+ros_packages/src/emdb_simulator/assets/robocasa/
+# robocasa's own (gitignored-in-submodule, multi-GB) demonstration dataset
+# cache -- not needed to install/build the package.
+misc/robocasa/datasets/
