@@ -37,8 +37,29 @@ MUJOCO_LOG.TXT
 # build doesn't transfer all of it into the build context every time.
 misc/robocasa/robocasa/models/assets/textures/
 misc/robocasa/robocasa/models/assets/generative_textures/
-misc/robocasa/robocasa/models/assets/fixtures/
 misc/robocasa/robocasa/models/assets/objects/
+
+# fixtures/ is NOT a blanket exclude, unlike the three above -- it mixes
+# downloaded 3D geometry with git-tracked config (fixture_registry/*.yaml
+# etc.) in the SAME subdirectories (e.g. cabinets/cabinet_panels/ has both).
+# Excluding the whole tree silently drops needed files like
+# fixture_registry/wall.yaml, breaking scene loading with a
+# FileNotFoundError that has nothing to do with the asset bind-mount itself.
+# This mirrors robocasa's own misc/robocasa/.gitignore logic for this exact
+# directory: exclude by extension (the actual downloaded geometry), then
+# re-include the specific subdirectories it also re-includes.
+misc/robocasa/robocasa/models/assets/fixtures/**/*.glb
+misc/robocasa/robocasa/models/assets/fixtures/**/*.obj
+misc/robocasa/robocasa/models/assets/fixtures/**/*.mtl
+misc/robocasa/robocasa/models/assets/fixtures/**/*.blend
+misc/robocasa/robocasa/models/assets/fixtures/**/*.blend1
+misc/robocasa/robocasa/models/assets/fixtures/**/*.mp4
+misc/robocasa/robocasa/models/assets/fixtures/**/*.png
+misc/robocasa/robocasa/models/assets/fixtures/**/*.jpeg
+misc/robocasa/robocasa/models/assets/fixtures/**/model.xml
+!misc/robocasa/robocasa/models/assets/fixtures/fixture_registry/**
+!misc/robocasa/robocasa/models/assets/fixtures/accessories/**
+!misc/robocasa/robocasa/models/assets/fixtures/counters/**
 # Local-only asset mirror some dev workflows populate under the ROS
 # package itself (untracked by git; emdb_simulator's setup.py data_files
 # only need assets/grippers/, not assets/robocasa/).
