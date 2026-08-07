@@ -15,7 +15,12 @@ fi
 
 # ---------------------------------------------------------------------------
 # Singularity cache/tmp on $LUSTRE (fast NVMe, large) instead of $HOME
-# (10GB quota, too small for image pulls/builds).
+# (10GB quota, too small for image pulls/builds). NOTE: $LUSTRE's default
+# 200,000-file quota can be tight for this image's extraction (FUSE mount
+# isn't available on this cluster, so `singularity exec` falls back to
+# fully extracting the image on every invocation) -- see
+# docs/source/howto/running_on_cesga.md, "Pulling the image", if you hit
+# EDQUOT/"disk quota exceeded" errors.
 # ---------------------------------------------------------------------------
 export SINGULARITY_CACHEDIR="${SINGULARITY_CACHEDIR:-$LUSTRE/singularity-cache}"
 export SINGULARITY_TMPDIR="${SINGULARITY_TMPDIR:-$LUSTRE/singularity-tmp}"
@@ -40,11 +45,13 @@ fi
 # ---------------------------------------------------------------------------
 # Kitchen assets, downloaded ONCE (not per job/array task -- concurrent
 # downloads into the same directory would race/corrupt partial extracts)
-# onto fast NVMe $LUSTRE storage and bind-mounted read-only into every job.
-# See docs/source/howto/running_on_cesga.md, "One-time kitchen-asset
-# priming" for the priming command. Bind target must be exactly
-# misc/robocasa/robocasa/models/assets -- see docker/Dockerfile.cpu step 5
-# for why.
+# onto fast NVMe $LUSTRE storage and bind-mounted into every job. Bound as
+# the WHOLE assets/ directory, not just the downloaded subdirectories -- see
+# docs/source/howto/running_on_cesga.md, "One-time kitchen-asset priming"
+# for why (a `.sif` is read-only outside bind mounts, and the download
+# script itself needs to write into this parent, not just its leaf dirs) and
+# for the priming command that seeds this directory with the image's other,
+# non-downloaded baked-in files before first use.
 # ---------------------------------------------------------------------------
 ASSETS_DIR="${ASSETS_DIR:-$LUSTRE/emdb_assets}"
 if [ ! -d "$ASSETS_DIR/textures" ]; then

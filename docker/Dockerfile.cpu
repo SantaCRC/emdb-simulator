@@ -106,17 +106,21 @@ RUN pip install colcon-common-extensions "empy==3.3.4"
 RUN rosdep install --from-paths /opt/emdb/ros_packages/src --ignore-src -r -y
 
 # ---------------------------------------------------------------------------
-# 5. Asset mount point (no download here -- see file header comment).
-#    This is exactly the directory DOWNLOAD_ASSET_REGISTRY in
-#    misc/robocasa/robocasa/scripts/download_kitchen_assets.py populates
-#    (textures, generative_textures, fixtures, objects/{objaverse,aigen_objs,
-#    lightwheel} all live under this one folder). `pip install -e` above
-#    makes robocasa.__path__[0] point at this in-image source tree, so a
-#    single bind mount here at run time supplies every asset type at once.
-#    The directory must exist now -- Singularity can't mkdir onto a
-#    read-only SIF at runtime.
+# 5. Asset mount point: no RUN needed. misc/robocasa/robocasa/models/assets/
+#    already exists after COPY (it holds baked-in, non-downloaded files this
+#    image needs at import time: box_links/box_links_assets.json, arenas/,
+#    scenes/, etc.). `pip install -e` above makes robocasa.__path__[0]
+#    point at this in-image source tree.
+#
+#    At run time, the WHOLE assets/ directory is bind-mounted over (see
+#    docs/source/howto/running_on_cesga.md's asset-priming section) rather
+#    than just the downloaded subdirectories -- a `.sif` is read-only
+#    outside of bind mounts, and download_kitchen_assets.py writes each
+#    type's zip into assets/ itself (the parent of its target folder)
+#    before extracting, not just into the leaf folder. Priming seeds the
+#    host directory with this image's baked-in files first so the bind
+#    mount doesn't shadow them.
 # ---------------------------------------------------------------------------
-RUN mkdir -p misc/robocasa/robocasa/models/assets
 
 # ---------------------------------------------------------------------------
 # 6. Build the ROS 2 workspace. This bakes a self-contained image usable

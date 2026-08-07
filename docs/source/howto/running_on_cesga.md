@@ -53,6 +53,19 @@ needs to be pulled and converted to `.sif` once. Point Singularity's
 cache/tmp at `$LUSTRE` rather than `$HOME` (10GB is far too small for image
 pulls):
 
+```{important}
+`singularity exec` on this cluster can't use FUSE (`fusermount3: mount
+failed: Operation not permitted`) and falls back to fully extracting the
+image into `$SINGULARITY_TMPDIR` on **every** invocation, not just this
+one-time pull -- that extraction alone is enough small files
+(torch/scipy/numpy's `.venv`, ~150k+) to risk hitting `$LUSTRE`'s
+200,000-file quota (a *default* quota -- `lfs quota -u $USER $LUSTRE` won't
+show a nonzero limit, but it's still enforced). If you hit
+`EDQUOT`/"disk quota exceeded" errors mid-extraction, clean up
+`$LUSTRE/singularity-tmp/build-temp-*` leftovers from failed attempts and
+free up other `$LUSTRE` usage, or ask CESGA support for a higher file quota.
+```
+
 ```bash
 mkdir -p "$LUSTRE/singularity-cache" "$LUSTRE/singularity-tmp"
 export SINGULARITY_CACHEDIR="$LUSTRE/singularity-cache"
@@ -91,9 +104,30 @@ downloaded once to fast `$LUSTRE` NVMe storage and bind-mounted read-only
 into every job, so many parallel `--array` tasks share a single copy
 instead of each holding or re-downloading their own.
 
+```{important}
+Priming is **two steps**. A `.sif` is read-only outside bind mounts (and
+Singularity's own default auto-binds like `/tmp`/`$HOME`), and
+`download_kitchen_assets.py` writes each type's zip into `models/assets/`
+itself (the parent of its target folder) before extracting -- so the
+*whole* `models/assets` directory needs to be bind-mounted, not just its
+downloaded subdirectories. But that directory also holds files baked into
+the image that aren't downloaded assets (`box_links/box_links_assets.json`,
+needed at import time, plus `arenas/`, `scenes/`, etc.) -- bind-mounting
+over it blind would shadow those with an empty host directory. Step 1 below
+seeds the host directory with those baked-in files first (**no** bind mount
+active yet, so it reads the image's real copies); step 2 downloads with the
+now-safe whole-directory bind mount active.
+```
+
 ```bash
 module load singularity
 mkdir -p "$LUSTRE/emdb_assets"
+
+# Step 1: seed with this image's baked-in (non-downloaded) files.
+singularity exec "$STORE/emdb_simulator_cpu.sif" bash -c \
+  "cp -r /opt/emdb/misc/robocasa/robocasa/models/assets/. $LUSTRE/emdb_assets/"
+
+# Step 2: download the real assets into the now-seeded directory.
 singularity exec \
   --bind "$LUSTRE/emdb_assets:/opt/emdb/misc/robocasa/robocasa/models/assets" \
   "$STORE/emdb_simulator_cpu.sif" bash -c \

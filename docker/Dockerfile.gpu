@@ -117,8 +117,8 @@ RUN rosdep install --from-paths /opt/emdb/ros_packages/src --ignore-src -r -y
 
 # ---------------------------------------------------------------------------
 # 6. Asset mount point -- see Dockerfile.cpu step 5 for the full rationale.
+#    No RUN needed: assets/ already exists after COPY.
 # ---------------------------------------------------------------------------
-RUN mkdir -p misc/robocasa/robocasa/models/assets
 
 # ---------------------------------------------------------------------------
 # 7. Build the ROS 2 workspace -- see Dockerfile.cpu step 6 for rationale
