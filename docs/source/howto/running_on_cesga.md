@@ -15,6 +15,19 @@ Everything that actually simulates goes through SLURM (`sbatch`), as
 described below.
 ```
 
+```{note}
+Everything here runs **fully headless** -- CESGA compute nodes have no
+display. `Xvfb` (X *virtual* framebuffer, no real display attached) is
+what makes `scene_loader` importable at all (`pynput.keyboard` needs *some*
+X connection even when nothing listens for keys, see
+{doc}`recording_video`, section 4), not a step toward an actual GUI. Debug
+visibility comes from `record_video:=true` rendering mp4s to disk instead
+(already wired into `hpc/cesga/emdb_with_architecture.sbatch`;
+{doc}`run_simulator` for the equivalent flags on the standalone
+`emdb_simulator_{cpu,gpu}.sbatch` scripts) -- nothing here ever needs or
+attempts to open a real window.
+```
+
 ## 1. Storage tiers
 
 | Directory | Use | Speed | Space limit | Files limit | Backup | Snapshot |
@@ -142,6 +155,26 @@ checks `$LUSTRE/emdb_assets/textures` exists before letting a job proceed,
 and fails fast with a clear error if priming hasn't happened yet.
 ```
 
+```{note}
+**If a run fails with `FileNotFoundError` under
+`models/assets/objects/...` or `models/assets/fixtures/...`**, one asset
+type didn't fully land (a download can report success per-`--type` while
+still missing some files, or a manual `mv`/`cp` between directories gets
+interrupted). Check what's actually there --
+`ls "$LUSTRE/emdb_assets/objects/"` should show `objaverse`, `aigen_objs`,
+`lightwheel`, `README.md` -- and re-download just the missing piece rather
+than redoing everything (registry names: `tex`, `tex_generative`,
+`fixtures_lw`, `objs_objaverse`, `objs_aigen`, `objs_lw`; `--type all` for
+everything):
+
+```bash
+singularity exec \
+  --bind "$LUSTRE/emdb_assets:/opt/emdb/misc/robocasa/robocasa/models/assets" \
+  "$STORE/emdb_simulator_cpu.sif" bash -c \
+  "yes | python -m robocasa.scripts.download_kitchen_assets --type objs_aigen objs_lw"
+```
+```
+
 ## 4. Getting code onto the cluster
 
 Clone or `rsync` the repository to `$HOME/emdb_simulator_develop` (the default
@@ -260,11 +293,34 @@ The architecture side needs its own **already-built** ROS workspace
 (`install/setup.bash` present) bind-mounted in read-only, matching the
 standalone architecture sbatch workflow's own pattern -- the image itself
 doesn't bake in `experiments`/`sim2D_launch.py`, only ROS + Python deps.
-Defaults to `$HOME/emdb_develop` (`ARCH_HOST_WORKSPACE` to override); build
-it there first (`colcon build`) if it isn't already. The launch command
-itself defaults to `ros2 launch experiments sim2D_launch.py`
+Defaults to `$HOME/emdb_develop` (`ARCH_HOST_WORKSPACE` to override). The
+launch command itself defaults to `ros2 launch experiments sim2D_launch.py`
 (`ARCH_PACKAGE`/`ARCH_LAUNCH_FILE` to override).
 ```
+
+If `$HOME/emdb_develop` (or wherever your checkout lives) doesn't have
+`install/setup.bash` yet, build it once, from the login node, using the
+architecture's own image (so the build uses the exact same ROS/Python
+environment the job will run against):
+
+```bash
+cd $HOME/emdb_develop
+singularity exec $STORE/emdb_cpu.sif bash -c \
+  "source /opt/ros/humble/setup.bash && colcon build --symlink-install"
+```
+
+```{note}
+Skip `rosdep install` here -- the image has no `sudo`/root access to run
+`rosdep init` first (`ERROR: no sources directory exists on the system
+meaning rosdep has not yet been initialized`), and it isn't needed anyway:
+this is a proven, already-working production image, so its Python/ROS
+dependencies are already satisfied. Just `colcon build` directly.
+```
+
+This takes a minute or two (19 packages, mostly small `ament_python`
+nodes plus a couple of message-generation ones) and only needs to happen
+once -- rerun it after pulling architecture code changes, same as any
+colcon workspace.
 
 ```{note}
 `sim2D_launch.py`, not `bartender_launch.py` -- `bartender_launch.py` also
@@ -289,6 +345,46 @@ the discrete-event simulator), plus new `Perception`/`Policy`/`WorldModel`
 Python classes on the architecture side for the "lift" domain. Both are
 explicit followups — see `mdb_experiments/lift_experiment.yaml`'s own TODO
 comments for the current state of that gap.
+```
+
+A full run takes roughly 1.5–2 minutes end to end before results are ready
+(FUSE isn't available on this cluster, so both containers fall back to
+fully extracting into a temp sandbox on every invocation, plus the
+simulator side rebuilds `ros_packages` from scratch each run) — the script
+waits 90s before checking, well inside its `--time=00:15:00` budget. Watch
+it with:
+
+```bash
+squeue -u $USER
+```
+
+Once it drops out of the queue, logs are in your submission directory as
+`emdb_with_architecture_<jobid>_<taskid>.out`/`.err` (SLURM splits
+stdout/stderr — `ros2 launch` output and colcon build progress land in
+`.out`; module-load/singularity messages in `.err`), and the check result
+in `$STORE/emdb_runs/emdb_with_architecture_<jobid>/task_0/plumbing_check.log`.
+A working run's log looks like this (both containers found each other; the
+simulator's node and perception topic are visible from inside the
+architecture container):
+
+```text
+/commander
+/execution_node_1
+/execution_node_2
+/execution_node_3
+/execution_node_4
+/execution_node_5
+/ltm_0
+/robocasa_rollout_node
+---
+/emdb/simulator/sensor/progress
+```
+
+```{note}
+`fusermount3: mount failed: Operation not permitted` / `WARNING: squashfuse
+mount failed, falling back to extraction` on every `singularity exec`
+(including the pull/priming commands above) is expected on this cluster,
+not an error to chase -- see the FUSE note in step 2.
 ```
 
 ## 7. Downloading results
