@@ -100,12 +100,10 @@ Owns the actual RoboCasa/robosuite `env`. The core node is
   (via robosuite's `DataCollectionWrapper`), and consolidates the successful
   ones into a robomimic-format `demo.hdf5` on `/save_demos`.
 
-Two other standalone nodes exist for manual testing:
+One other standalone node exists for manual testing:
 {py:class}`emdb_simulator.core.keyboard_client.KeyboardDeltaClient` (console
 script `keyboard_client`), which turns key presses into
-`/set_delta_action` calls, and
-{py:class}`emdb_simulator.core.position_server.PositionServer`, a minimal
-example service/publisher pair unrelated to the RoboCasa env.
+`/set_delta_action` calls.
 
 (emdb_policy)=
 ## `emdb_policy`

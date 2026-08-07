@@ -71,10 +71,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'robocasa_teleop_standalone = emdb_simulator.core.robocasa_node:main',
             'scene_loader = emdb_simulator.core.scene_loader:main',
             'keyboard_client = emdb_simulator.core.keyboard_client:main',
-            'position_server = emdb_simulator.core.position_server:main',
         ],
     },
 )

@@ -137,28 +137,3 @@ Per-episode offscreen mp4 recording (`EpisodeRecordingSpec`,
    :show-inheritance:
 ```
 
-## `emdb_simulator.core.position_server`
-
-Console script: `position_server`. Minimal example
-publisher/service pair unrelated to the RoboCasa environment.
-
-```{eval-rst}
-.. automodule:: emdb_simulator.core.position_server
-   :members:
-   :undoc-members:
-   :show-inheritance:
-```
-
-## `emdb_simulator.core.robocasa_node`
-
-Console script: `robocasa_teleop_standalone`. Standalone RoboCasa teleoperation node
-using robosuite/RoboCasa's own human-trajectory collection helper directly,
-independent of the `SceneLoader`/ROS-interface path used elsewhere in this
-package.
-
-```{eval-rst}
-.. automodule:: emdb_simulator.core.robocasa_node
-   :members:
-   :undoc-members:
-   :show-inheritance:
-```

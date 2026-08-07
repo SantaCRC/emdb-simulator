@@ -884,7 +884,6 @@ class SceneLoader(Node):
                     self.get_logger().debug(f"Joint {i}: {name}")
             if self.env._check_success():
                 self.get_logger().info("Success achieved!")
-                # Update success metrics
 
             if input_ac_dict is None:
                 self.env.reset()

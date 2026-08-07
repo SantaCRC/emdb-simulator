@@ -39,8 +39,8 @@ jobs:
           # Preinstalling the CPU wheel first satisfies robocasa's
           # torch<2.8.0,>=2.2.1 constraint without pip ever reaching for CUDA.
           pip install torch==2.7.1+cpu torchvision==0.22.1+cpu --index-url https://download.pytorch.org/whl/cpu
-          # scene_loader.py/robocasa_node.py import robosuite/robocasa at module
-          # level, so autodoc needs them actually importable, not just mocked.
+          # scene_loader.py imports robosuite/robocasa at module level, so
+          # autodoc needs them actually importable, not just mocked.
           # Installed together so pip's resolver settles on one consistent
           # version set instead of installing robosuite's preferred versions
           # then immediately uninstalling/reinstalling robocasa's exact pins.
