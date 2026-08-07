@@ -70,17 +70,28 @@ singularity exec "${BIND_ARGS[@]}" \
 SIM_PID=$!
 
 # --- Architecture side --------------------------------------------------
-# Matches the standalone invocation for santacrc/emdb_cesga_cpu/_gpu: `ros2
-# launch experiments bartender_launch.py` (emdb_experiments_gii's bartender
-# experiment, per ws_bartender's experiments/launch/bartender_launch.py).
-# Override ARCH_PACKAGE/ARCH_LAUNCH_FILE on the command line if you want a
-# different experiment (e.g. a future lift-domain launch file once that
-# bridge exists -- see this script's header comment).
+# Matches the standalone architecture sbatch workflow's own pattern: source
+# ROS, use an already-built workspace (install/setup.bash present -- no
+# clone/colcon-build here, unlike that script's from-scratch fallback path),
+# run `ros2 launch experiments bartender_rl_launch.py`. Override
+# ARCH_PACKAGE/ARCH_LAUNCH_FILE for a different experiment, and
+# ARCH_HOST_WORKSPACE if your built checkout lives somewhere other than the
+# default (matches that script's own HOST_WORKSPACE default).
+ARCH_HOST_WORKSPACE="${ARCH_HOST_WORKSPACE:-$HOME/emdb_develop}"
+if [ ! -f "$ARCH_HOST_WORKSPACE/install/setup.bash" ]; then
+    echo "ERROR: $ARCH_HOST_WORKSPACE/install/setup.bash not found -- build" \
+         "the architecture workspace first (colcon build), or set" \
+         "ARCH_HOST_WORKSPACE to point at one that's already built." >&2
+    exit 1
+fi
 ARCH_PACKAGE="${ARCH_PACKAGE:-experiments}"
-ARCH_LAUNCH_FILE="${ARCH_LAUNCH_FILE:-bartender_launch.py}"
+ARCH_LAUNCH_FILE="${ARCH_LAUNCH_FILE:-bartender_rl_launch.py}"
 singularity exec \
-    "$ARCH_SIF" \
-    ros2 launch "$ARCH_PACKAGE" "$ARCH_LAUNCH_FILE" &
+    --bind "$ARCH_HOST_WORKSPACE:/workspace/emdb_develop:ro" \
+    "$ARCH_SIF" bash -c \
+    "source /opt/ros/humble/setup.bash && \
+     source /workspace/emdb_develop/install/setup.bash && \
+     ros2 launch $ARCH_PACKAGE $ARCH_LAUNCH_FILE" &
 ARCH_PID=$!
 
 # Let both ROS graphs come up before checking.
@@ -91,7 +102,8 @@ sleep 20
 # two singularity instances. Doesn't call/exercise anything -- visibility
 # only, matching this script's "just plumbing" scope (see header comment).
 singularity exec "$ARCH_SIF" \
-    bash -c "ros2 node list; echo ---; ros2 topic list | grep /emdb/simulator" \
+    bash -c "source /opt/ros/humble/setup.bash && \
+             ros2 node list; echo ---; ros2 topic list | grep /emdb/simulator" \
     > "$OUT_DIR/plumbing_check.log" 2>&1
 
 echo "Plumbing check written to $OUT_DIR/plumbing_check.log"

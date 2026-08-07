@@ -66,8 +66,13 @@ fi
 # to ros_packages/ only -- NEVER bind-mount misc/robosuite or misc/robocasa
 # here, that would shadow the editable-installed package (and its assets
 # mount point) with whatever partial copy exists under $HOME's 10GB quota.
+#
+# Defaults to $HOME/emdb_simulator_develop, NOT $HOME/emdb_develop -- the
+# latter is already used by the separate e-MDB architecture's own existing
+# CESGA workflow for its own checkout (see
+# hpc/cesga/emdb_with_architecture.sbatch's ARCH_HOST_WORKSPACE).
 # ---------------------------------------------------------------------------
-HOST_WORKSPACE="${HOST_WORKSPACE:-$HOME/emdb_develop}"
+HOST_WORKSPACE="${HOST_WORKSPACE:-$HOME/emdb_simulator_develop}"
 if [ ! -d "$HOST_WORKSPACE/ros_packages" ]; then
     echo "ERROR: $HOST_WORKSPACE/ros_packages not found -- clone/rsync the" \
          "repo there first (see docs/source/howto/running_on_cesga.md," \

@@ -144,11 +144,11 @@ and fails fast with a clear error if priming hasn't happened yet.
 
 ## 4. Getting code onto the cluster
 
-Clone or `rsync` the repository to `$HOME/emdb_develop` (the default
+Clone or `rsync` the repository to `$HOME/emdb_simulator_develop` (the default
 `HOST_WORKSPACE` the sbatch scripts expect):
 
 ```bash
-git clone <repo-url> $HOME/emdb_develop
+git clone <repo-url> $HOME/emdb_simulator_develop
 ```
 
 ```{important}
@@ -182,13 +182,13 @@ and a shared [`_common.sh`](../../../hpc/cesga/_common.sh) they both
 source):
 
 ```bash
-cd $HOME/emdb_develop
+cd $HOME/emdb_simulator_develop
 sbatch hpc/cesga/emdb_simulator_cpu.sbatch                  # single run
 sbatch --array=0-4 hpc/cesga/emdb_simulator_cpu.sbatch      # 5 parallel variations
 sbatch hpc/cesga/emdb_simulator_gpu.sbatch                  # GPU variant
 ```
 
-Both scripts default `HOST_WORKSPACE` to `$HOME/emdb_develop` and the
+Both scripts default `HOST_WORKSPACE` to `$HOME/emdb_simulator_develop` and the
 `.sif` path to `$STORE/emdb_simulator_<variant>.sif`; override either on
 the command line if you used different locations:
 
@@ -255,13 +255,15 @@ which would need a real cross-node discovery mechanism (e.g. a CycloneDDS
 static peer list) that hasn't been built or tested here.
 ```
 
-```{note}
-The script's architecture-side launch command defaults to `ros2 launch
-experiments bartender_launch.py` (`ARCH_PACKAGE`/`ARCH_LAUNCH_FILE`
-variables near the top, per `ws_bartender`'s
-`emdb_experiments_gii/experiments/launch/bartender_launch.py`) — the
-current standalone invocation for `santacrc/emdb_cesga_cpu`/`_gpu`.
-Override both on the `sbatch` command line for a different experiment.
+```{important}
+The architecture side needs its own **already-built** ROS workspace
+(`install/setup.bash` present) bind-mounted in read-only, matching the
+standalone architecture sbatch workflow's own pattern -- the image itself
+doesn't bake in `experiments`/`bartender_rl_launch.py`, only ROS + Python
+deps. Defaults to `$HOME/emdb_develop` (`ARCH_HOST_WORKSPACE` to override);
+build it there first (`colcon build`) if it isn't already. The launch
+command itself defaults to `ros2 launch experiments bartender_rl_launch.py`
+(`ARCH_PACKAGE`/`ARCH_LAUNCH_FILE` to override).
 ```
 
 ```{note}
