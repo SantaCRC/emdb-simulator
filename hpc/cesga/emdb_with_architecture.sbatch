@@ -73,7 +73,7 @@ SIM_PID=$!
 # Matches the standalone architecture sbatch workflow's own pattern: source
 # ROS, use an already-built workspace (install/setup.bash present -- no
 # clone/colcon-build here, unlike that script's from-scratch fallback path),
-# run `ros2 launch experiments bartender_rl_launch.py`. Override
+# run `ros2 launch experiments bartender_launch.py`. Override
 # ARCH_PACKAGE/ARCH_LAUNCH_FILE for a different experiment, and
 # ARCH_HOST_WORKSPACE if your built checkout lives somewhere other than the
 # default (matches that script's own HOST_WORKSPACE default).
@@ -85,7 +85,7 @@ if [ ! -f "$ARCH_HOST_WORKSPACE/install/setup.bash" ]; then
     exit 1
 fi
 ARCH_PACKAGE="${ARCH_PACKAGE:-experiments}"
-ARCH_LAUNCH_FILE="${ARCH_LAUNCH_FILE:-bartender_rl_launch.py}"
+ARCH_LAUNCH_FILE="${ARCH_LAUNCH_FILE:-bartender_launch.py}"
 singularity exec \
     --bind "$ARCH_HOST_WORKSPACE:/workspace/emdb_develop:ro" \
     "$ARCH_SIF" bash -c \

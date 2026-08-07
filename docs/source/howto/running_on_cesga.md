@@ -259,10 +259,10 @@ static peer list) that hasn't been built or tested here.
 The architecture side needs its own **already-built** ROS workspace
 (`install/setup.bash` present) bind-mounted in read-only, matching the
 standalone architecture sbatch workflow's own pattern -- the image itself
-doesn't bake in `experiments`/`bartender_rl_launch.py`, only ROS + Python
+doesn't bake in `experiments`/`bartender_launch.py`, only ROS + Python
 deps. Defaults to `$HOME/emdb_develop` (`ARCH_HOST_WORKSPACE` to override);
 build it there first (`colcon build`) if it isn't already. The launch
-command itself defaults to `ros2 launch experiments bartender_rl_launch.py`
+command itself defaults to `ros2 launch experiments bartender_launch.py`
 (`ARCH_PACKAGE`/`ARCH_LAUNCH_FILE` to override).
 ```
 
