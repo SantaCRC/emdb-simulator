@@ -28,7 +28,7 @@
 #   (3-day limit) or longer instead if you raise --time for a real run.
 
 VARIANT=cpu
-source "$(dirname "$0")/_common.sh"
+source "$SLURM_SUBMIT_DIR/hpc/cesga/_common.sh"
 
 # The architecture's own image -- pre-existing, unrelated .sif naming/pull
 # workflow (docs/source/howto/running_on_cesga.md's "Pulling the image"
@@ -48,6 +48,12 @@ fi
 # one machine, with zero extra networking config. The per-array-task offset
 # is defense in depth in case multiple (simulator, architecture) pairs ever
 # land on nodes that can see each other's multicast traffic.
+#
+# `export`ed here, not passed via `singularity exec --env` -- that flag
+# takes KEY=VALUE pairs only (no Docker-style pass-through-by-name), and is
+# unnecessary anyway: singularity inherits the calling shell's exported
+# environment into the container by default (same mechanism entrypoint.sh
+# already relies on for its own RMW_IMPLEMENTATION/MUJOCO_GL fallbacks).
 export ROS_DOMAIN_ID=$(( 10 + TASK_ID ))
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
@@ -57,7 +63,7 @@ cleanup() {
 trap cleanup EXIT
 
 # --- Simulator side (this repo's image) -------------------------------
-singularity exec "${BIND_ARGS[@]}" --env ROS_DOMAIN_ID,RMW_IMPLEMENTATION \
+singularity exec "${BIND_ARGS[@]}" \
     "$SIF" /opt/emdb/entrypoint.sh \
     ros2 launch emdb_simulator emdb_simulator.launch.py \
         perception_mode:=mdb &
@@ -72,7 +78,7 @@ SIM_PID=$!
 # bridge exists -- see this script's header comment).
 ARCH_PACKAGE="${ARCH_PACKAGE:-experiments}"
 ARCH_LAUNCH_FILE="${ARCH_LAUNCH_FILE:-bartender_launch.py}"
-singularity exec --env ROS_DOMAIN_ID,RMW_IMPLEMENTATION \
+singularity exec \
     "$ARCH_SIF" \
     ros2 launch "$ARCH_PACKAGE" "$ARCH_LAUNCH_FILE" &
 ARCH_PID=$!
@@ -84,7 +90,7 @@ sleep 20
 # inside the architecture container, proving DDS discovery works across the
 # two singularity instances. Doesn't call/exercise anything -- visibility
 # only, matching this script's "just plumbing" scope (see header comment).
-singularity exec --env ROS_DOMAIN_ID,RMW_IMPLEMENTATION "$ARCH_SIF" \
+singularity exec "$ARCH_SIF" \
     bash -c "ros2 node list; echo ---; ros2 topic list | grep /emdb/simulator" \
     > "$OUT_DIR/plumbing_check.log" 2>&1
 

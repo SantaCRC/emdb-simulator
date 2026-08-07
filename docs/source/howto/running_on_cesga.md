@@ -148,7 +148,17 @@ Clone or `rsync` the repository to `$HOME/emdb_develop` (the default
 `HOST_WORKSPACE` the sbatch scripts expect):
 
 ```bash
-git clone --recurse-submodules <repo-url> $HOME/emdb_develop
+git clone <repo-url> $HOME/emdb_develop
+```
+
+```{important}
+**Do NOT pass `--recurse-submodules`.** `misc/robosuite`, `misc/robocasa`,
+`misc/robomimic`, `misc/mimicgen`, `misc/robosuite_models` are already
+baked into the image at build time -- nothing on the CESGA side ever reads
+them from a host checkout (`hpc/cesga/_common.sh`'s `BIND_ARGS` only binds
+`ros_packages/` and the primed assets, never `misc/`). Recursively cloning
+them anyway easily blows `$HOME`'s 10GB quota for zero benefit -- e.g.
+`misc/robosuite`'s git history alone is 400+MB, on top of the other four.
 ```
 
 ```{important}

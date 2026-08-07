@@ -20,7 +20,7 @@
 #   quick smoke tests, or `long`/`ondemand` for multi-day runs.
 
 VARIANT=gpu
-source "$(dirname "$0")/_common.sh"
+source "$SLURM_SUBMIT_DIR/hpc/cesga/_common.sh"
 
 # --nv exposes the host's NVIDIA driver/EGL libs into the container (see
 # docker/Dockerfile.gpu's header comment for why those aren't baked into

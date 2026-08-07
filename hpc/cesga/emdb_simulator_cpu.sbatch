@@ -18,7 +18,7 @@
 #   multi-day runs beyond medium's 3-day cap.
 
 VARIANT=cpu
-source "$(dirname "$0")/_common.sh"
+source "$SLURM_SUBMIT_DIR/hpc/cesga/_common.sh"
 
 # `entrypoint.sh` is invoked explicitly rather than relying on Singularity
 # to honor the image's Docker ENTRYPOINT (`singularity exec` does not
