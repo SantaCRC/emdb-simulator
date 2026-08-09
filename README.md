@@ -1,4 +1,5 @@
 # EMDB Simulator
+[![Docs](https://github.com/SantaCRC/emdb-simulator/actions/workflows/docs.yml/badge.svg)](https://github.com/SantaCRC/emdb-simulator/actions/workflows/docs.yml)
 
 EMDB is a ROS 2 workspace that wraps [RoboCasa](https://github.com/SantaCRC/robocasa) /
 [robosuite](https://github.com/SantaCRC/robosuite) kitchen-manipulation simulation behind a
