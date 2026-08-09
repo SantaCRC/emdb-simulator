@@ -117,6 +117,14 @@ class VideoRecorder:
         self._episode_success = False
         self._step_counter = 0
         self._camera_unavailable = False
+        # keep_successes-only episodes (not in episode_spec) are "deferred":
+        # instead of rendering/encoding every step just to maybe throw it
+        # away, buffer cheap sim state and only render+encode after the
+        # fact, if the episode actually succeeds. See maybe_start_episode/
+        # capture_frame/_finish_deferred_episode.
+        self._deferred = False
+        self._deferred_states = []
+        self._env = None
 
     def _ensure_run_dir(self):
         if self._run_dir is not None:
@@ -126,16 +134,8 @@ class VideoRecorder:
         os.makedirs(self._run_dir, exist_ok=True)
         return self._run_dir
 
-    def maybe_start_episode(self, episode_id):
-        self.close_episode()  # finalize the previous episode first
-
-        if not self.enabled or self._camera_unavailable:
-            return
-        in_range = self.episode_spec.contains(episode_id)
-        if not in_range and not self.keep_successes:
-            self._current_episode_id = None
-            return
-
+    def _open_writer(self, episode_id):
+        """Returns (writer, path), or (None, None) and sets _camera_unavailable on failure."""
         run_dir = self._ensure_run_dir()
         path = os.path.join(run_dir, f"episode_{int(episode_id):04d}.mp4")
 
@@ -156,20 +156,43 @@ class VideoRecorder:
                     "recording disabled for this run"
                 )
             self._camera_unavailable = True
+            return None, None
+        return writer, path
+
+    def maybe_start_episode(self, episode_id):
+        self.close_episode()  # finalize the previous episode first
+
+        if not self.enabled or self._camera_unavailable:
+            return
+        in_range = self.episode_spec.contains(episode_id)
+        if not in_range and not self.keep_successes:
+            self._current_episode_id = None
             return
 
-        self._writer = writer
         self._current_episode_id = episode_id
-        self._current_path = path
         self._current_in_range = in_range
         self._episode_success = False
         self._step_counter = 0
-        if self.logger is not None:
-            self.logger.info(f"Recording episode {episode_id} -> {path}")
+
+        if in_range:
+            # Explicitly requested -- record live, kept regardless of outcome.
+            self._deferred = False
+            self._writer, self._current_path = self._open_writer(episode_id)
+            if self._writer is not None and self.logger is not None:
+                self.logger.info(f"Recording episode {episode_id} -> {self._current_path}")
+        else:
+            # Only wanted if this episode succeeds (keep_successes). Buffer
+            # cheap sim state per step instead of rendering/encoding live --
+            # render+encode happens once, after the fact, only if it
+            # succeeds (see close_episode/_finish_deferred_episode). Keeps
+            # keep_successes-only training runs at full physics speed.
+            self._deferred = True
+            self._deferred_states = []
 
     def capture_frame(self, env, success=False):
-        if self._writer is None or self._camera_unavailable:
+        if self._camera_unavailable or self._current_episode_id is None:
             return
+        self._env = env
 
         if success:
             self._episode_success = True
@@ -178,6 +201,12 @@ class VideoRecorder:
         if (self._step_counter - 1) % self.stride != 0:
             return
 
+        if self._deferred:
+            self._deferred_states.append(env.sim.get_state())
+            return
+
+        if self._writer is None:
+            return
         try:
             rgb = env.sim.render(
                 width=self.width, height=self.height, camera_name=self.camera_name
@@ -199,11 +228,70 @@ class VideoRecorder:
             self._camera_unavailable = True
             self.close_episode()
 
+    def _finish_deferred_episode(self):
+        """Render+encode a buffered episode now that we know it succeeded.
+
+        Replays each buffered (qpos, qvel) snapshot by writing it straight
+        into the live `env.sim` and rendering -- cheaper than re-running
+        physics, but it does mean this temporarily clobbers whatever
+        current state `env.sim` holds (the *next* episode's fresh
+        `env.reset()`, already applied by the time this runs -- see
+        scene_loader._reset_episode_cb). Always restored in `finally`.
+        """
+        states = self._deferred_states
+        episode_id = self._current_episode_id
+        succeeded = self._episode_success
+        env = self._env
+        self._deferred_states = []
+        self._deferred = False
+
+        if not states or not succeeded or env is None:
+            return
+
+        writer, path = self._open_writer(episode_id)
+        if writer is None:
+            return
+
+        restore_state = env.sim.get_state()
+        ok = True
+        try:
+            for state in states:
+                env.sim.set_state(state)
+                env.sim.forward()
+                rgb = env.sim.render(
+                    width=self.width, height=self.height, camera_name=self.camera_name
+                )
+                writer.append_data(rgb[::-1])
+        except Exception as exc:
+            ok = False
+            if self.logger is not None:
+                self.logger.error(
+                    f"Deferred video replay failed for episode {episode_id} ({exc}); discarding."
+                )
+        finally:
+            env.sim.set_state(restore_state)
+            env.sim.forward()
+            writer.close()
+
+        if not ok:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+        elif self.logger is not None:
+            self.logger.info(f"Episode {episode_id} succeeded -- saved recording -> {path}")
+
     def close_episode(self):
+        if self._deferred:
+            self._finish_deferred_episode()
+            self._current_episode_id = None
+            self._current_in_range = False
+            self._episode_success = False
+            self._step_counter = 0
+            return
+
         path = self._current_path
-        keep = path is not None and (
-            self._current_in_range or (self.keep_successes and self._episode_success)
-        )
+        keep = path is not None and self._current_in_range
 
         if self._writer is not None:
             try:

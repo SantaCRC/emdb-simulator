@@ -9,6 +9,7 @@ from launch_ros.parameter_descriptions import ParameterValue
 def generate_launch_description():
     teleop = LaunchConfiguration('teleop')
     control_mode = PythonExpression(["'teleop' if '", teleop, "' == 'true' else 'rl'"])
+    headless = LaunchConfiguration('headless')
     perception_mode = LaunchConfiguration('perception_mode')
     record_video = LaunchConfiguration('record_video')
     record_video_dir = LaunchConfiguration('record_video_dir')
@@ -22,6 +23,7 @@ def generate_launch_description():
     record_video_keep_successes = LaunchConfiguration('record_video_keep_successes')
     preview_camera = LaunchConfiguration('preview_camera')
     preview_camera_names = LaunchConfiguration('preview_camera_names')
+    preview_camera_live = LaunchConfiguration('preview_camera_live')
     custom_cameras_file = LaunchConfiguration('custom_cameras_file')
 
     return LaunchDescription([
@@ -29,6 +31,14 @@ def generate_launch_description():
             'teleop',
             default_value='false',
             description='Launch the keyboard client and drive scene_loader in teleop mode instead of rl.',
+        ),
+        DeclareLaunchArgument(
+            'headless',
+            default_value='false',
+            description="Don't create the on-screen mjviewer window or render to it "
+                        '(has_renderer=False), regardless of control_mode. Unrelated to '
+                        'record_video/offscreen rendering. Turn on for an rl-mode training '
+                        "run where nobody's watching the window.",
         ),
         DeclareLaunchArgument(
             'perception_mode',
@@ -109,6 +119,13 @@ def generate_launch_description():
                         "or a comma-separated list of camera names.",
         ),
         DeclareLaunchArgument(
+            'preview_camera_live',
+            default_value='false',
+            description='With preview_camera:=true, open the interactive viewer fixed on '
+                        'the camera instead of saving a PNG and exiting. Locks to the first '
+                        'name in preview_camera_names (no split-view for multiple names).',
+        ),
+        DeclareLaunchArgument(
             'custom_cameras_file',
             default_value='',
             description='Path to a YAML file defining extra cameras (see '
@@ -123,6 +140,7 @@ def generate_launch_description():
             parameters=[{
                 'task': 'KitchenLift',
                 'control_mode': control_mode,
+                'headless': ParameterValue(headless, value_type=bool),
                 'perception_mode': perception_mode,
                 'record_video': ParameterValue(record_video, value_type=bool),
                 'record_video_dir': record_video_dir,
@@ -138,6 +156,7 @@ def generate_launch_description():
                 ),
                 'preview_camera': ParameterValue(preview_camera, value_type=bool),
                 'preview_camera_names': preview_camera_names,
+                'preview_camera_live': ParameterValue(preview_camera_live, value_type=bool),
                 'custom_cameras_file': custom_cameras_file,
             }],
         ),

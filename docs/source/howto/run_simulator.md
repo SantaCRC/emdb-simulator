@@ -27,6 +27,7 @@ ros2 run emdb_simulator scene_loader --ros-args \
 | `style_id` | `11` | Kitchen visual style id (`-1` picks one at random). |
 | `show_walls` | `false` | Disable the enclosing-wall render wrapper's transparency (walls fully visible). |
 | `renderer` | `mjviewer` | robosuite/MuJoCo renderer backend. |
+| `headless` | `false` | Don't create the on-screen `mjviewer` window at all (`has_renderer=False`) and skip the per-step `env.render()` call, regardless of `control_mode`. Unrelated to `record_video`/offscreen rendering, which is a separate render path and works the same either way. Turn on (`headless:=true`) for an `rl`-mode training run where nobody's watching the window. Leave off (default) to debug visually, in `teleop` or `rl`. |
 | `publish_rate` | `20.0` | Hz for the teleop render/step loop and topic publishing. |
 | `control_mode` | `teleop` | `teleop` (timer-driven, keyboard input) or `rl` (external `/step_action` calls only, see {doc}`training_rl`). |
 | `collect_demos` | `false` | Record every teleop episode to a temp dir via robosuite's `DataCollectionWrapper`; see {doc}`recording_demos`. |

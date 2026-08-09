@@ -28,6 +28,18 @@ episode is stepped and `control_mode`/`teleop` are ignored.
 |---|---|---|
 | `preview_camera` | `false` | Enable the dry-run: build the scene, save previews, log camera names, exit. |
 | `preview_camera_names` | `all` | `all` (every camera in the loaded model) or a comma-separated list of camera names. |
+| `preview_camera_live` | `false` | With `preview_camera:=true`, open the interactive viewer fixed on the camera instead of saving a PNG and exiting. |
+
+Prefer to just look instead of saving a file? Add `preview_camera_live:=true`
+(needs a display — not for headless/cluster use). It locks the interactive
+viewer to the first name in `preview_camera_names` and keeps it open (Ctrl+C
+to stop) instead of saving and exiting:
+
+```bash
+ros2 launch emdb_simulator emdb_simulator.launch.py \
+  preview_camera:=true preview_camera_live:=true \
+  preview_camera_names:=robot0_agentview_center
+```
 
 ```{tip}
 The node also logs every available camera name on startup regardless of
@@ -61,12 +73,19 @@ subdirectory per launch), encoded with imageio's ffmpeg/libx264 plugin.
 | `record_video_height` | `720` | Frame height, in pixels. |
 | `record_video_stride` | `1` | Capture every Nth simulation step (`1` = every step). |
 | `record_video_crf` | `18` | libx264 CRF quality (`0`=lossless, `18`=near-lossless, `23`=default, `51`=worst). |
-| `record_video_keep_successes` | `false` | Also record and keep any episode where the task succeeds, even if its index falls outside `record_video_episodes` (an in-range episode is always kept regardless of success). Costs more: *every* episode is recorded while this is on, and non-in-range/non-successful ones are deleted right after. |
+| `record_video_keep_successes` | `false` | Also record and keep any episode where the task succeeds, even if its index falls outside `record_video_episodes` (an in-range episode is always kept regardless of success). Cheap while off-target: out-of-range episodes only buffer sim state (no render/encode) until the outcome is known, see note below. |
 
 ```{note}
 An episode outside `record_video_episodes` (and not kept via
 `record_video_keep_successes`) is never written to disk in the first
-place. `VideoRecorder` only opens a writer for episodes it intends to keep.
+place. In-range episodes render/encode live as they're stepped, same as
+always. Out-of-range episodes kept alive only by `record_video_keep_successes`
+don't render at all while running -- `VideoRecorder` just buffers each
+step's MuJoCo state (cheap: no offscreen render, no ffmpeg) and only
+replays it through the renderer/encoder once, after the episode ends, if
+it actually succeeded. A training run with `keep_successes:=true` and few
+early successes stays at full physics speed; only the episodes that
+succeed pay a one-off render/encode cost, right after they end.
 ```
 
 ```{warning}
@@ -151,7 +170,7 @@ xvfb-run -a ros2 launch emdb_simulator emdb_simulator.launch.py \
 | `perception_mode` | `mdb` | The e-MDB-cognitive-architecture perception layout: per-object topics under `/emdb/simulator/sensor/...` (here, `/emdb/simulator/sensor/obj`, since `KitchenLift`'s object is named `"obj"`), a `.../grasped` `std_msgs/Bool` for it, and task success as `.../progress` (`std_msgs/Float32`). Reward is modeled as just another perception rather than a dedicated channel. See {doc}`../architecture`. |
 | `record_video` | `true` | Turns on per-episode offscreen mp4 recording (and `has_offscreen_renderer`). |
 | `record_video_episodes` | `0-4` | Explicitly records (and always keeps) episodes `0` through `4`, the "specific iterations" part of this example. Unquoted ranges/lists like this parse fine on the CLI; only a *single bare integer* (e.g. `0`) needs the `:="'0'"` string-literal trick to stop ROS inferring an int-typed parameter, since this one is a string param. |
-| `record_video_keep_successes` | `true` | The "in case of success" part: any episode *outside* `0-4` is still recorded, but only kept on disk if `_check_success()` fires before it ends. Otherwise it's deleted right after. Episodes `0` through `4` are kept unconditionally either way. Costs more (every episode gets recorded while this is on), so only turn it on when you actually want to catch successes past the explicit range. |
+| `record_video_keep_successes` | `true` | The "in case of success" part: any episode *outside* `0-4` only has its sim state buffered (no render/encode) while it runs, and only gets rendered/encoded to disk if `_check_success()` fired by the time it ends -- otherwise the buffer is dropped, nothing was ever rendered. Episodes `0` through `4` are recorded live and kept unconditionally either way. Only successful out-of-range episodes pay a (one-off, after the fact) render/encode cost. |
 | `record_video_camera` | `robot0_agentview_center_rear` | The custom rear-view camera from section 3, parented to `mobilebase0_support` so it follows the robot. |
 | `custom_cameras_file` | `config/cameras/example_custom_cameras.yaml` | Required here: `robot0_agentview_center_rear` isn't a built-in camera, it only exists once this file is loaded (and only for `task:=KitchenLift`, this launch file's default task). |
 | `record_video_dir` | `/tmp/emdb_videos` | Shown explicitly for clarity; it's already the default. Videos land at `record_video_dir/run_<timestamp>/episode_NNNN.mp4`. |

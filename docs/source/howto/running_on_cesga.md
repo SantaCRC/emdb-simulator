@@ -253,8 +253,39 @@ even after shutting down cleanly at the Python level (see
 proof a run failed.
 ```
 
+## 6. Training the RL baseline (train_sb3)
+
+[`hpc/cesga/train_baseline_cpu.sbatch`](../../../hpc/cesga/train_baseline_cpu.sbatch)
+runs {doc}`training_rl`'s `train_sb3` as a single SLURM job: launches the
+simulator in the background, waits for its `/step_action` service, runs
+`train_sb3` in the foreground, tears the simulator down when it's done.
+CPU only, deliberately -- `env.step()` here is single-threaded MuJoCo
+physics, not GPU-accelerable in this codebase (robosuite/robocasa use the
+classic `mujoco` bindings, not MJX/Warp), so a GPU node would be wasted on
+this job.
+
+```bash
+sbatch hpc/cesga/train_baseline_cpu.sbatch
+sbatch --array=0-4 hpc/cesga/train_baseline_cpu.sbatch   # 5 seeds in parallel
+```
+
+Every `train_sb3` CLI flag is overridable via an env var of the same name
+(`ALGO`, `TIMESTEPS`, `MAX_EPISODE_STEPS`, `SAC_ENT_COEF`, `ENT_COEF`;
+`SEED` defaults to the array task id, so `--array` gives independent seeds
+instead of identical copies):
+
+```bash
+TIMESTEPS=1000000 ALGO=ppo sbatch hpc/cesga/train_baseline_cpu.sbatch
+```
+
+Results (`model.zip`, `monitor.csv`, TensorBoard event files) land in the
+same `$STORE/emdb_runs/<job-name>_<job-id>/task_<id>/` layout as the other
+`.sbatch` scripts (step 5) -- see {doc}`training_rl` for what each file
+means and for the sparse-reward tuning notes (`--algo sac` vs `ppo`,
+`--sac-ent-coef`) this script's defaults already bake in.
+
 (cesga-with-architecture)=
-## 6. Running alongside the e-MDB architecture
+## 7. Running alongside the e-MDB architecture
 
 A full experiment needs the simulator running together with the actual
 **e-MDB cognitive architecture** (from the separate `ws_bartender`
@@ -387,7 +418,7 @@ mount failed, falling back to extraction` on every `singularity exec`
 not an error to chase -- see the FUSE note in step 2.
 ```
 
-## 7. Downloading results
+## 8. Downloading results
 
 Results land under `$STORE/emdb_runs/...` (see step 5). Pull them back to
 your local machine over SSH, e.g.:
@@ -403,7 +434,7 @@ rsync -avz ft3.cesga.es:'$STORE/emdb_runs/' ./emdb_runs/
 - {doc}`recording_video`: background on why headless runs need `xvfb-run`
   at all (handled automatically by the image's entrypoint here, but useful
   context if you're debugging outside a container).
-- {doc}`training_rl`: run `train_sb3` inside a job instead of a fixed
-  `ros2 launch` command, for actual RL training on CESGA.
+- {doc}`training_rl`: `train_sb3`'s CLI flags and sparse-reward tuning
+  notes, referenced by step 6's `train_baseline_cpu.sbatch`.
 - {ref}`cesga-with-architecture`: running the simulator together with the
   separate e-MDB cognitive architecture container.

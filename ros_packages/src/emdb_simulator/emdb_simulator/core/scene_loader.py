@@ -68,6 +68,13 @@ class SceneLoader(Node):
         self.declare_parameter("style_id", 11)
         self.declare_parameter("show_walls", False)
         self.declare_parameter("renderer", "mjviewer")
+        # Skips the per-step self.env.render() call (the on-screen mjviewer
+        # window) regardless of control_mode -- independent of
+        # record_video/has_offscreen_renderer, which is a separate,
+        # unrelated render path. Off by default so nobody's current
+        # workflow changes; turn on for a real rl-mode training run where
+        # nobody's watching the window, off (default) to debug visually.
+        self.declare_parameter("headless", False)
         self.declare_parameter("publish_rate", 20.0)
         self.declare_parameter("control_mode", "teleop")
         self.declare_parameter("collect_demos", False)
@@ -85,6 +92,7 @@ class SceneLoader(Node):
         self.declare_parameter("record_video_keep_successes", False)
         self.declare_parameter("preview_camera", False)
         self.declare_parameter("preview_camera_names", "all")
+        self.declare_parameter("preview_camera_live", False)
         self.declare_parameter("custom_cameras_file", "")
 
         self.task = self.get_parameter("task").value
@@ -93,6 +101,7 @@ class SceneLoader(Node):
         self.style_id = int(self.get_parameter("style_id").value)
         self.show_walls = bool(self.get_parameter("show_walls").value)
         self.renderer = self.get_parameter("renderer").value
+        self.headless = bool(self.get_parameter("headless").value)
         self.publish_rate = float(self.get_parameter("publish_rate").value)
         self.control_mode = self.get_parameter("control_mode").value
         self.collect_demos = bool(self.get_parameter("collect_demos").value)
@@ -114,6 +123,7 @@ class SceneLoader(Node):
         )
         self.preview_camera = bool(self.get_parameter("preview_camera").value)
         self.preview_camera_names = self.get_parameter("preview_camera_names").value
+        self.preview_camera_live = bool(self.get_parameter("preview_camera_live").value)
         self.custom_cameras_file = self.get_parameter("custom_cameras_file").value
         self.custom_cameras = load_custom_cameras(
             self.custom_cameras_file, logger=self.get_logger()
@@ -157,7 +167,12 @@ class SceneLoader(Node):
         self._dynamic_object_state_pubs = {}
         self._grasped_check_warned = False
 
-        self.episode_id = 0
+        # -1 = "no episode started yet". In teleop mode _create_env() below
+        # bumps this to 0 immediately since the user is already driving the
+        # robot; in rl mode it stays -1 until the client's first
+        # /reset_episode call, so the client's own episode 0 lands on
+        # episode_id 0 too instead of being shifted by a phantom episode.
+        self.episode_id = -1
         self.step_id = 0
 
         self.layouts = self._build_layouts()
@@ -244,7 +259,9 @@ class SceneLoader(Node):
         except Exception:
             pass
 
-        if self.preview_camera:
+        if self.preview_camera and self.preview_camera_live:
+            self.timer = self.create_timer(1.0 / self.publish_rate, self._run_camera_preview_live)
+        elif self.preview_camera:
             self.timer = self.create_timer(0.1, self._run_camera_preview_and_exit)
         elif self.control_mode == "teleop":
             self.timer = self.create_timer(1.0 / self.publish_rate, self._render_loop)
@@ -294,11 +311,12 @@ class SceneLoader(Node):
         )
         self.get_logger().info(json.dumps(config))
 
+        live_preview = self.preview_camera and self.preview_camera_live
         self.env = robosuite.make(
             **config,
-            has_renderer=True,
-            has_offscreen_renderer=self.record_video or self.preview_camera,
-            render_camera=None,
+            has_renderer=not self.headless,
+            has_offscreen_renderer=self.record_video or (self.preview_camera and not live_preview),
+            render_camera=self._first_preview_camera_name() if live_preview else None,
             ignore_done=True,
             use_camera_obs=False,
             control_freq=int(self.publish_rate),
@@ -323,7 +341,9 @@ class SceneLoader(Node):
             )
 
         self.env.reset()
-        self.video_recorder.maybe_start_episode(self.episode_id)
+        if self.control_mode == "teleop":
+            self.episode_id += 1
+            self.video_recorder.maybe_start_episode(self.episode_id)
 
     def _set_layout_style(self):
         if not self.is_kitchen_task:
@@ -566,7 +586,8 @@ class SceneLoader(Node):
         self._publish_observation(obs)
         self._publish_step_info(reward, terminated=success, truncated=False, success=success)
         self._publish_progress(success)
-        self.env.render()
+        if not self.headless:
+            self.env.render()
         self.video_recorder.capture_frame(self.env, success=success)
 
     def _step_action_cb(self, request, response):
@@ -916,6 +937,33 @@ class SceneLoader(Node):
         if spec in ("", "all", "*"):
             return list(self.env.sim.model.camera_names)
         return [name.strip() for name in self.preview_camera_names.split(",") if name.strip()]
+
+    def _first_preview_camera_name(self):
+        """Camera to fix the interactive mjviewer on for preview_camera_live.
+
+        Called before self.env exists, so unlike _resolve_preview_camera_names
+        this can't expand "all" to the model's camera list -- "all"/empty
+        falls back to the default free camera instead.
+        """
+        spec = (self.preview_camera_names or "").strip().lower()
+        if spec in ("", "all", "*"):
+            return None
+        names = [name.strip() for name in self.preview_camera_names.split(",") if name.strip()]
+        if len(names) > 1:
+            self.get_logger().info(
+                "preview_camera_live shows one fixed camera at a time; "
+                f"using {names[0]!r} (first of {self.preview_camera_names!r})"
+            )
+        return names[0] if names else None
+
+    def _run_camera_preview_live(self):
+        try:
+            self.env.step(np.zeros(self.env.action_dim))
+        except Exception as e:
+            self.get_logger().error(f"Camera preview render failed: {e}")
+            self.get_logger().error(traceback.format_exc())
+            self.destroy_node()
+            rclpy.shutdown()
 
     def _run_camera_preview_and_exit(self):
         self.timer.cancel()

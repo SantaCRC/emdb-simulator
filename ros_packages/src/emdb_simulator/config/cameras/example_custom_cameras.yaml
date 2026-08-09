@@ -50,3 +50,16 @@ cameras:
     parent_body: mobilebase0_support
     pos: [3.0, 0.0, 1.8]
     lookat: [0.0, 0.0, 0.5]
+
+  # UNVERIFIED guess at a pulled-back "front view": mirroring pos.x off the
+  # rear camera above ([-3.0, ...] instead of [3.0, ...]) actually rendered
+  # as another rear-ish angle, not front -- so pos.x sign alone doesn't
+  # control front/rear on this body frame. This entry instead offsets along
+  # y (left/right in the base's local frame) at the same height/distance,
+  # on the guess that "front" sits off to the side rather than directly
+  # behind pos.x=0. preview_camera this before trusting it; if it's still
+  # wrong, try pos: [0.0, -3.0, 1.8] (the opposite y sign) next.
+  - name: robot0_agentview_center_front
+    parent_body: mobilebase0_support
+    pos: [0.0, 3.0, 1.8]
+    lookat: [0.0, 0.0, 0.5]

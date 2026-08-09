@@ -99,6 +99,10 @@ RUN if [ -n "$(ls -A misc/robosuite_models 2>/dev/null)" ]; then \
         echo "misc/robosuite_models is empty, skipping (optional)"; \
     fi
 
+# gymnasium + stable-baselines3: emdb_policy's train_sb3 RL baseline (same as
+# setup.sh).
+RUN pip install gymnasium stable-baselines3
+
 # colcon must be importable via the venv's python; empy pinned to 3.3.4 for
 # ROS 2 Humble's rosidl_adapter (same as setup.sh).
 RUN pip install colcon-common-extensions "empy==3.3.4"

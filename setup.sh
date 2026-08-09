@@ -87,6 +87,18 @@ fi
 source "$VENV_DIR/bin/activate"
 python -m pip install --upgrade pip wheel setuptools
 
+log "Installing CPU-only torch..."
+# robocasa depends on lerobot==0.3.3, which otherwise pulls torch's default
+# CUDA build -- multiple GB of nvidia-*-cu* wheels, and on machines whose
+# installed NVIDIA driver doesn't match that build's expected CUDA runtime,
+# an import-time crash (missing libcudartX.so). Same fix as docker/Dockerfile.cpu.
+# train_sb3's PPO policy is a tiny MLP with the sim/ROS round-trip as the
+# actual bottleneck, so CPU is the right choice here regardless of whether
+# this machine has a GPU; if you specifically need GPU torch, install it
+# manually after this script finishes.
+pip install torch==2.7.1+cpu torchvision==0.22.1+cpu \
+    --index-url https://download.pytorch.org/whl/cpu
+
 log "Installing robosuite (editable)..."
 pip install -e "$REPO_ROOT/misc/robosuite"
 
@@ -100,6 +112,9 @@ if [ -n "$(ls -A "$REPO_ROOT/misc/robosuite_models" 2>/dev/null)" ]; then
 else
     echo "  misc/robosuite_models is empty, skipping (optional dependency)"
 fi
+
+log "Installing gymnasium + stable-baselines3 (emdb_policy's train_sb3)..."
+pip install gymnasium stable-baselines3
 
 if [ "$WITH_DOCS" -eq 1 ]; then
     log "Installing docs/ build dependencies..."
