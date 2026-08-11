@@ -87,17 +87,33 @@ fi
 source "$VENV_DIR/bin/activate"
 python -m pip install --upgrade pip wheel setuptools
 
-log "Installing CPU-only torch..."
-# robocasa depends on lerobot==0.3.3, which otherwise pulls torch's default
-# CUDA build -- multiple GB of nvidia-*-cu* wheels, and on machines whose
-# installed NVIDIA driver doesn't match that build's expected CUDA runtime,
-# an import-time crash (missing libcudartX.so). Same fix as docker/Dockerfile.cpu.
-# train_sb3's PPO policy is a tiny MLP with the sim/ROS round-trip as the
-# actual bottleneck, so CPU is the right choice here regardless of whether
-# this machine has a GPU; if you specifically need GPU torch, install it
-# manually after this script finishes.
-pip install torch==2.7.1+cpu torchvision==0.22.1+cpu \
-    --index-url https://download.pytorch.org/whl/cpu
+log "Installing torch..."
+# robocasa depends on lerobot==0.3.3, which pulls in torch<2.8.0,>=2.2.1;
+# pin the exact version explicitly (numeric-version parity between the CPU
+# and GPU cases below) rather than leaving it to whatever pip's resolver
+# picks that day.
+#
+# Machines without a working NVIDIA GPU+driver get the CPU-only wheel:
+# otherwise pip pulls torch's default CUDA build -- multiple GB of unneeded
+# nvidia-*-cu12 wheels with nothing to run them on, and on machines whose
+# installed driver doesn't match that build's expected CUDA runtime, an
+# import-time crash (missing libcudartX.so). Same fix as
+# docker/Dockerfile.cpu and .github/workflows/docs.yml.
+# Machines that DO have a working GPU get the CUDA build (matches
+# docker/Dockerfile.gpu) so RoboCasa/train_sb3 can actually use it.
+if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
+    echo "  NVIDIA GPU detected -- installing CUDA-enabled torch."
+    pip install torch==2.7.1 torchvision==0.22.1
+else
+    echo "  No usable NVIDIA GPU detected -- installing CPU-only torch."
+    echo "  (train_sb3's PPO policy is a tiny MLP; the sim/ROS round-trip is"
+    echo "  the actual bottleneck, so this is fine even for training. If"
+    echo "  this detection is wrong for your machine -- e.g. nvidia-smi"
+    echo "  fails because the driver needs a reboot after an update -- pip"
+    echo "  install the CUDA build manually once that's sorted out.)"
+    pip install torch==2.7.1+cpu torchvision==0.22.1+cpu \
+        --index-url https://download.pytorch.org/whl/cpu
+fi
 
 log "Installing robosuite (editable)..."
 pip install -e "$REPO_ROOT/misc/robosuite"
