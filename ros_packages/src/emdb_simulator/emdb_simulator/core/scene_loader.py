@@ -174,6 +174,10 @@ class SceneLoader(Node):
         # episode_id 0 too instead of being shifted by a phantom episode.
         self.episode_id = -1
         self.step_id = 0
+        # Cached from the last _apply_env_action_and_publish() / reset, so the
+        # rl-mode heartbeat timer can re-publish it between steps without
+        # re-stepping physics (see _mdb_perception_heartbeat).
+        self._last_success = False
 
         self.layouts = self._build_layouts()
         self.styles = self._build_styles()
@@ -266,10 +270,18 @@ class SceneLoader(Node):
         elif self.control_mode == "teleop":
             self.timer = self.create_timer(1.0 / self.publish_rate, self._render_loop)
         else:
-            self.timer = None
+            # Physics itself only advances on /step_action(_raw) calls, but
+            # sensor topics still need to keep streaming between steps for
+            # consumers that expect continuous perceptions (e.g. e-MDB's main
+            # loop) rather than one-shot per-step values -- see
+            # _mdb_perception_heartbeat.
+            self.timer = self.create_timer(
+                1.0 / self.publish_rate, self._mdb_perception_heartbeat
+            )
             self.get_logger().info(
-                "control_mode=rl -> periodic render loop disabled; "
-                "physics only advances on /step_action calls"
+                "control_mode=rl -> periodic render loop disabled; physics "
+                "only advances on /step_action calls, but sensor topics "
+                f"still stream at {self.publish_rate} Hz via the heartbeat"
             )
 
     def _build_layouts(self):
@@ -579,6 +591,7 @@ class SceneLoader(Node):
     def _apply_env_action_and_publish(self, env_action):
         obs, reward, _done, _info = self.env.step(env_action)
         success = bool(self.env._check_success())
+        self._last_success = success
         self.step_id += 1
 
         self._publish_joint_states()
@@ -589,6 +602,27 @@ class SceneLoader(Node):
         if not self.headless:
             self.env.render()
         self.video_recorder.capture_frame(self.env, success=success)
+
+    def _mdb_perception_heartbeat(self):
+        """Re-publish the current (cached) sensor state on a timer in rl mode.
+
+        Physics only advances on /step_action(_raw), but consumers such as
+        e-MDB's main loop expect perceptions to keep flowing continuously
+        (like the teleop render loop does); without this, a perception read
+        between steps times out and the client can deadlock waiting on a
+        value that will only ever arrive on the next step it, itself, has to
+        trigger. This does NOT call self.env.step() -- object poses are read
+        live from sim.data (so an idle scene just re-publishes the same
+        pose), and the reward/success streamed here is the last one computed
+        by a real step (or False before the first reset).
+        """
+        if self.env is None or self.episode_id < 0:
+            return
+        try:
+            self._publish_object_states()
+            self._publish_progress(self._last_success)
+        except Exception as e:
+            self.get_logger().error(f"mdb perception heartbeat failed: {e}")
 
     def _step_action_cb(self, request, response):
         if self.control_mode != "rl":
@@ -666,6 +700,7 @@ class SceneLoader(Node):
             self._publish_observation(obs)
             self._publish_step_info(reward=0.0, terminated=False, truncated=False, success=False)
             self._publish_progress(False)
+            self._last_success = False
 
             response.success = True
             response.message = (
