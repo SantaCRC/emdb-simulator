@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 import json
 import os
+import queue
 import re
+import threading
 import time
+from concurrent.futures import Future
 from copy import deepcopy
 from collections import OrderedDict
 from glob import glob
@@ -11,6 +14,8 @@ import traceback
 import numpy as np
 import rclpy
 from rclpy.node import Node
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Bool, Float32
 from std_srvs.srv import Trigger
@@ -167,6 +172,24 @@ class SceneLoader(Node):
         self._dynamic_object_state_pubs = {}
         self._grasped_check_warned = False
 
+        # env.reset()/env.step()/env.render() must only run on the thread
+        # that created the MuJoCo/GLFW render context (this constructor's
+        # thread -- see run_sim_loop() and main() below). ROS spins on a
+        # separate thread, so every service/timer callback that touches
+        # self.env enqueues its work here instead of calling it directly.
+        self._sim_queue = queue.Queue()
+
+        # All timers share this group, separate from services' default
+        # group. Services block their callback (via _run_on_sim_thread)
+        # until the sim thread answers, same as timers do -- under a
+        # SingleThreadedExecutor with everything in one MutuallyExclusive
+        # group, a continuously-firing timer (e.g. the rl perception loop)
+        # starves service calls like /reset_episode indefinitely. main()
+        # spins with a MultiThreadedExecutor so these two groups actually
+        # run concurrently; _run_on_sim_thread's queue keeps the real MuJoCo
+        # work serialized regardless.
+        self._timer_cbgroup = MutuallyExclusiveCallbackGroup()
+
         # -1 = "no episode started yet". In teleop mode _create_env() below
         # bumps this to 0 immediately since the user is already driving the
         # robot; in rl mode it stays -1 until the client's first
@@ -264,11 +287,17 @@ class SceneLoader(Node):
             pass
 
         if self.preview_camera and self.preview_camera_live:
-            self.timer = self.create_timer(1.0 / self.publish_rate, self._run_camera_preview_live)
+            self.timer = self.create_timer(
+                1.0 / self.publish_rate, self._run_camera_preview_live,
+                callback_group=self._timer_cbgroup)
         elif self.preview_camera:
-            self.timer = self.create_timer(0.1, self._run_camera_preview_and_exit)
+            self.timer = self.create_timer(
+                0.1, self._run_camera_preview_and_exit,
+                callback_group=self._timer_cbgroup)
         elif self.control_mode == "teleop":
-            self.timer = self.create_timer(1.0 / self.publish_rate, self._render_loop)
+            self.timer = self.create_timer(
+                1.0 / self.publish_rate, self._render_loop,
+                callback_group=self._timer_cbgroup)
         else:
             # Physics itself only advances on /step_action(_raw) calls, but
             # sensor topics still need to keep streaming between steps for
@@ -283,6 +312,54 @@ class SceneLoader(Node):
                 "only advances on /step_action calls, but sensor topics "
                 f"still stream at {self.publish_rate} Hz via the heartbeat"
             )
+
+    def _pump_viewer(self):
+        """Refresh the on-screen window, if any. Must run on the thread that
+        owns the render context (see _run_on_sim_thread).
+
+        env.render() is a documented no-op for the mjviewer renderer (only
+        env.step() pumps MjviewerRenderer.viewer.update() internally, see
+        robosuite/renderers/viewer/mjviewer_renderer.py) -- dispatch the same
+        way robosuite's own step() does (environments/base.py).
+        """
+        if self.headless or self.env.viewer is None:
+            return
+        if self.env.renderer == "mujoco":
+            self.env.render()
+        else:
+            self.env.viewer.update()
+
+    def _run_on_sim_thread(self, fn):
+        """Run fn() on the thread that owns the MuJoCo/GLFW render context,
+        blocking the caller until it completes.
+
+        With the on-screen mjviewer renderer (has_renderer=True, the
+        default headless=false), calling env.reset()/env.step()/env.render()
+        from any thread other than the one that created the context hangs
+        forever with no exception -- GLFW's context isn't thread-safe.
+        Service/timer callbacks route through here instead of touching
+        self.env directly. See docs/source/howto/run_simulator.md.
+        """
+        fut = Future()
+        self._sim_queue.put((fn, fut))
+        return fut.result()
+
+    def run_sim_loop(self):
+        """Drain queued env.reset()/step()/render() work on this thread.
+
+        Must be called from the thread that constructed this node (where
+        robosuite.make() created the render context) -- see main() below,
+        which spins ROS on a separate background thread instead.
+        """
+        while rclpy.ok():
+            try:
+                fn, fut = self._sim_queue.get(timeout=0.1)
+            except queue.Empty:
+                continue
+            try:
+                fut.set_result(fn())
+            except Exception as e:
+                fut.set_exception(e)
 
     def _build_layouts(self):
         raw = dict((item.value, item.name.lower().capitalize()) for item in LayoutType)
@@ -353,6 +430,13 @@ class SceneLoader(Node):
             )
 
         self.env.reset()
+        # Pump the window here (startup, on the thread that will own it) so
+        # the on-screen viewer is already up by the time any client's first
+        # /reset_episode call arrives. Without this, the mjviewer renderer's
+        # mujoco.viewer.launch_passive() -- a real window/GL-context create,
+        # not a cheap call -- happens lazily on whatever reset call is first,
+        # making it look hung to that caller for several seconds.
+        self._pump_viewer()
         if self.control_mode == "teleop":
             self.episode_id += 1
             self.video_recorder.maybe_start_episode(self.episode_id)
@@ -435,6 +519,9 @@ class SceneLoader(Node):
         ]
 
     def _reset_env_cb(self, request, response):
+        return self._run_on_sim_thread(lambda: self._reset_env_cb_impl(request, response))
+
+    def _reset_env_cb_impl(self, request, response):
         try:
             self.env.reset()
             self._set_layout_style()
@@ -453,6 +540,12 @@ class SceneLoader(Node):
         return response
 
     def _set_delta_action_cb(self, request, response):
+        # self.device is also read/mutated by the sim thread (_render_loop,
+        # _translate_delta_to_env_action), so route through it too rather
+        # than racing those from the ROS callback thread.
+        return self._run_on_sim_thread(lambda: self._set_delta_action_cb_impl(request, response))
+
+    def _set_delta_action_cb_impl(self, request, response):
         if request.toggle_base_mode:
             self.device.toggle_base_mode()
 
@@ -625,10 +718,21 @@ class SceneLoader(Node):
             self.get_logger().error(f"mdb perception heartbeat failed: {e}")
 
     def _step_action_cb(self, request, response):
+        return self._run_on_sim_thread(lambda: self._step_action_cb_impl(request, response))
+
+    def _step_action_cb_impl(self, request, response):
         if self.control_mode != "rl":
             response.success = False
             response.message = "control_mode is 'teleop'; /step_action is only available in 'rl' mode"
             response.episode_id = self.episode_id
+            response.step_id = self.step_id
+            return response
+
+        if self.episode_id < 0:
+            # -1 = no /reset_episode call yet (see __init__); episode_id is a
+            # uint64 field, so sending -1 through crashes message encoding.
+            response.success = False
+            response.message = "No episode started yet; call /reset_episode first"
             response.step_id = self.step_id
             return response
 
@@ -648,12 +752,21 @@ class SceneLoader(Node):
         return response
 
     def _step_action_raw_cb(self, request, response):
+        return self._run_on_sim_thread(lambda: self._step_action_raw_cb_impl(request, response))
+
+    def _step_action_raw_cb_impl(self, request, response):
         if self.control_mode != "rl":
             response.success = False
             response.message = (
                 "control_mode is 'teleop'; /step_action_raw is only available in 'rl' mode"
             )
             response.episode_id = self.episode_id
+            response.step_id = self.step_id
+            return response
+
+        if self.episode_id < 0:
+            response.success = False
+            response.message = "No episode started yet; call /reset_episode first"
             response.step_id = self.step_id
             return response
 
@@ -673,6 +786,9 @@ class SceneLoader(Node):
         return response
 
     def _reset_episode_cb(self, request, response):
+        return self._run_on_sim_thread(lambda: self._reset_episode_cb_impl(request, response))
+
+    def _reset_episode_cb_impl(self, request, response):
         try:
             if request.layout_id != -1:
                 self.layout_id = int(request.layout_id)
@@ -712,7 +828,9 @@ class SceneLoader(Node):
             response.success = False
             response.message = f"Reset failed: {e}"
 
-        response.episode_id = self.episode_id
+        # episode_id is a uint64 field; self.episode_id is still -1 here only
+        # if env.reset() itself failed on the very first-ever reset attempt.
+        response.episode_id = max(self.episode_id, 0)
         return response
 
     def _find_successful_episodes(self, directory):
@@ -928,7 +1046,21 @@ class SceneLoader(Node):
                 grasped_pub.publish(grasped_msg)
 
 
+    def _publish_perceptions_loop(self):
+        self._run_on_sim_thread(self._publish_perceptions_loop_impl)
+
+    def _publish_perceptions_loop_impl(self):
+        # rl mode's periodic timer: publish current state only, never
+        # env.step()/env.reset() -- physics still only advances on
+        # /step_action, this just keeps sensor topics flowing between calls.
+        self._publish_joint_states()
+        self._publish_object_states()
+        self._publish_progress(self.env._check_success())
+
     def _render_loop(self):
+        self._run_on_sim_thread(self._render_loop_impl)
+
+    def _render_loop_impl(self):
         try:
             active_robot = self.env.robots[self.device.active_robot]
             input_ac_dict = self.device.input2action(mirror_actions=self.mirror_actions)
@@ -992,6 +1124,9 @@ class SceneLoader(Node):
         return names[0] if names else None
 
     def _run_camera_preview_live(self):
+        self._run_on_sim_thread(self._run_camera_preview_live_impl)
+
+    def _run_camera_preview_live_impl(self):
         try:
             self.env.step(np.zeros(self.env.action_dim))
         except Exception as e:
@@ -1034,11 +1169,37 @@ class SceneLoader(Node):
         super().destroy_node()
 
 
+def _spin_or_shutdown(node):
+    # An uncaught exception here (e.g. a callback bug outside its own
+    # try/except) would otherwise kill just this daemon thread: rclpy stops
+    # answering ANY service/topic forever with no crash and no further log --
+    # the node becomes a silent zombie, exactly the failure mode this file's
+    # threading fix exists to avoid. Shut down instead so run_sim_loop()'s
+    # `while rclpy.ok()` notices and main() exits loudly.
+    try:
+        # MultiThreadedExecutor so the timers' callback group (perceptions
+        # in rl mode, render loop in teleop) can't starve the services'
+        # default group -- see the _timer_cbgroup comment in __init__.
+        # _run_on_sim_thread's queue still serializes all actual MuJoCo
+        # work onto run_sim_loop()'s single thread regardless.
+        executor = MultiThreadedExecutor(num_threads=4)
+        rclpy.spin(node, executor=executor)
+    except Exception:
+        node.get_logger().error("ROS spin thread crashed:\n" + traceback.format_exc())
+        if rclpy.ok():
+            rclpy.shutdown()
+
+
 def main(args=None):
     rclpy.init(args=args)
     node = SceneLoader()
+    # ROS spins on a background thread; this (main) thread -- which is
+    # where robosuite.make() created the MuJoCo/GLFW render context --
+    # stays free to run env.reset()/step()/render() via run_sim_loop().
+    spin_thread = threading.Thread(target=_spin_or_shutdown, args=(node,), daemon=True)
+    spin_thread.start()
     try:
-        rclpy.spin(node)
+        node.run_sim_loop()
     except KeyboardInterrupt:
         pass
     finally:
