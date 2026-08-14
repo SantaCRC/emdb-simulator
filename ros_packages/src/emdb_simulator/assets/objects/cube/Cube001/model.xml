@@ -1,0 +1,29 @@
+<mujoco model="model">
+  <compiler angle="radian"/>
+  <asset/>
+  <worldbody>
+    <body>
+      <body name="object">
+        <!-- visual-only: group 1 is excluded from mass/inertia by every robosuite
+        scene's compiler inertiagrouprange="0 0" (base.xml), so this geom must not
+        be the object's only geom; see the group-0 collision geom below. -->
+        <geom type="box" size="0.025 0.025 0.025" rgba="0.9 0.1 0.1 1" group="1"
+              contype="0" conaffinity="0"
+              density="100" friction="0.95 0.3 0.1" solimp="0.998 0.998 0.001" solref="0.001 1"/>
+        <!-- collision: group 0, matches every real objaverse object's convention
+        (e.g. garlic's class="collision"); this is what gives the body actual
+        mass under inertiagrouprange="0 0", and lets it physically collide. -->
+        <geom type="box" size="0.025 0.025 0.025" group="0" rgba="0.5 0 0 0.5"
+              density="1000" friction="0.95 0.3 0.1" solimp="0.998 0.998 0.001" solref="0.001 1"/>
+        <!-- reg_bbox: placement-only bounding box robocasa's MJCFObject reads via
+             _setup_region_dict (objects.py) to compute bottom_offset/top_offset/
+             horizontal_radius. Invisible (alpha forced to 0 by that same code),
+             no mass, no collision. Matches the box geom above exactly since
+             it is the object's true bbox here. -->
+        <geom name="reg_bbox" type="box" pos="0 0 0" size="0.025 0.025 0.025"
+              group="1" contype="0" conaffinity="0" mass="0" rgba="0 1 0 0"/>
+      </body>
+    </body>
+  </worldbody>
+  <actuator/>
+</mujoco>

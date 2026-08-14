@@ -6,6 +6,7 @@ imported before robosuite.make() is called with this env name.
 """
 from robocasa.environments.kitchen.kitchen import *
 from robosuite.utils.mjcf_utils import array_to_string, find_elements, new_element
+from emdb_simulator.core.cube_object import OBJ_CATEGORIES, OBJ_GROUPS
 
 
 class KitchenLift(Kitchen):
@@ -32,7 +33,7 @@ class KitchenLift(Kitchen):
     # raise during sampling) and then confirmed with real end-to-end grasp
     # trials: every sampled instance's narrowest dimension stays under the
     # jaw's mechanical limit with margin, and all lift successfully.
-    DEFAULT_OBJ_GROUPS = ["straw", "peeler", "sugar_cube", "shrimp"]
+    DEFAULT_OBJ_GROUPS = ["cube"]
 
     def __init__(
         self,

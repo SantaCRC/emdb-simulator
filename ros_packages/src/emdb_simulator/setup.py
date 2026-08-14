@@ -61,6 +61,10 @@ setup(
             os.path.join('share', package_name, 'assets', 'grippers', 'twofg7_gripper', 'meshes', 'twofg7'),
             glob('assets/grippers/twofg7_gripper/meshes/twofg7/*.stl')
         ),
+        (
+            os.path.join('share', package_name, 'assets', 'objects', 'cube', 'Cube001'),
+            glob('assets/objects/cube/Cube001/*.xml')
+        ),
     ],
     install_requires=['setuptools'],
     zip_safe=True,

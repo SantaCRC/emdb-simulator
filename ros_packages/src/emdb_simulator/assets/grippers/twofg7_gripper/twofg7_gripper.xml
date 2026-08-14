@@ -51,11 +51,28 @@
                 <site name="ee_z" pos="0 0 0.1" size="0.005 .1" quat="1 0 0 0" rgba="0 0 1 0" type="cylinder" group="1"/>
                 <site name="grip_site_cylinder" pos="0 0 0" size="0.005 10" rgba="0 1 0 0.3" type="cylinder" group="1"/>
             </body>
-            <body name="leftfinger" pos="0 0 0">
+            <!-- pos.x=-0.007: static outward offset so the pad reaches the housing's
+            collar edge (~39.4mm from center) at the open joint limit, not just the raw
+            CAD pose (~32.4mm, 7mm short). Verified in mujoco (mj_forward) both standalone
+            and assembled on UR5eOmron via robosuite.make(KitchenLift). Moves the whole
+            open/closed range together (travel itself, 19mm, is untouched and already
+            matches the OnRobot datasheet); closed gap widens from ~18.8mm to ~32.8mm
+            as a result, a deliberate tradeoff (case-edge alignment over spec-accurate
+            closed gap), confirmed with the user. -->
+            <body name="leftfinger" pos="-0.009 0 0">
                 <inertial pos="-0.023 0 0.131" mass="0.1" diaginertia="0.0000306 0.0000243 0.0000130" />
                 <joint name="finger_joint1" pos="0 0 0" axis="-1 0 0" type="slide" limited="true" range="-0.019 0.0" damping="100" armature="1.0" frictionloss="1.0"/>
                 <geom type="mesh" contype="0" conaffinity="0" group="1" mesh="left_finger_vis" name="finger1_visual" rgba="0.499 0.499 0.499 1" />
-                <geom type="mesh" group="0" conaffinity="1" contype="0" solref="0.02 1" friction="1 0.005 0.0001" condim="4" mesh="left_finger_col" name="finger1_collision"/>
+                <!-- Two boxes, not the left_finger_col mesh: that mesh is a convex hull (see
+                file header), which fills in the bracket's concave bend into a solid wedge,
+                fatter than the real L-shaped part and wrong for contact. These instead hug the
+                true (non-convex) finger1_visual mesh's own profile, sampled per-mm along Z: the
+                mesh is a wide mounting bracket up top that narrows sharply into a thin blade
+                for the rest of its length down to the tip (a single box across the whole span
+                was too wide at the blade). Tip/foot contact is covered separately by
+                finger1_pad_collision below; this blade box only needs to span the gap up to it. -->
+                <geom type="box" size="0.0101 0.0147 0.0070" pos="-0.0228 0 0.1134" group="0" conaffinity="1" contype="0" solref="0.02 1" friction="1 0.005 0.0001" condim="4" name="finger1_collision_bracket"/>
+                <geom type="box" size="0.0035 0.0170 0.0162" pos="-0.0294 0 0.1402" group="0" conaffinity="1" contype="0" solref="0.02 1" friction="1 0.005 0.0001" condim="4" name="finger1_collision_blade"/>
                 <!-- x=-0.0294 (not -0.0127) matches where the finger mesh's own tip actually sits:
                 sampling left_finger_col's vertices in this body's local frame puts the lowest 3mm
                 of the mesh at x=[-32.85,-25.96], centroid x=-29.4mm. The previous -0.0127 put this
@@ -65,19 +82,22 @@
                 renders. -->
                 <body name="finger_joint1_tip" pos="-0.0294 0 0.14">
                     <inertial pos="0 0 0" quat="0 0 0 1" mass="0.01" diaginertia="0.01 0.01 0.01" />
-                    <geom size="0.004 0.015 0.015" pos="-0.003 0 0" quat="0 0 0 1" type="box" group="0" solref="0.01 0.5" friction="2 0.05 0.0001" conaffinity="1" contype="1" name="finger1_pad_collision"/>
+                    <geom size="0.004 0.015 0.015" pos="-0.003 0 0" quat="0 0 0 1" type="box" group="0" solref="0.02 1" friction="2 0.005 0.0001" conaffinity="1" contype="1" name="finger1_pad_collision"/>
                 </body>
             </body>
-            <body name="rightfinger" pos="0 0 0">
+            <!-- pos.x=0.007: mirrors leftfinger's outward offset, see its comment. -->
+            <body name="rightfinger" pos="0.009 0 0">
                 <inertial pos="0.023 0 0.131" mass="0.1" diaginertia="0.0000306 0.0000243 0.0000130" />
                 <joint name="finger_joint2" pos="0 0 0" axis="-1 0 0" type="slide" limited="true" range="0.0 0.019" damping="100" armature="1.0" frictionloss="1.0"/>
                 <geom type="mesh" contype="0" conaffinity="0" group="1" mesh="right_finger_vis" name="finger2_visual" rgba="0.499 0.499 0.499 1" />
-                <geom type="mesh" group="0" conaffinity="1" contype="0" solref="0.02 1" friction="1 0.005 0.0001" condim="4" mesh="right_finger_col" name="finger2_collision"/>
+                <!-- Two boxes, mirror finger1_collision_bracket/_blade, see their comment. -->
+                <geom type="box" size="0.0101 0.0147 0.0070" pos="0.0228 0 0.1134" group="0" conaffinity="1" contype="0" solref="0.02 1" friction="1 0.005 0.0001" condim="4" name="finger2_collision_bracket"/>
+                <geom type="box" size="0.0035 0.0170 0.0162" pos="0.0294 0 0.1402" group="0" conaffinity="1" contype="0" solref="0.02 1" friction="1 0.005 0.0001" condim="4" name="finger2_collision_blade"/>
                 <!-- mirrors finger_joint1_tip's fix: x=0.0294 matches right_finger_col's own tip
                 centroid (mirror-symmetric with the left finger, x=+29.4mm), not the old 0.0127. -->
                 <body name="finger_joint2_tip" pos="0.0294 0 0.14">
                     <inertial pos="0 0 0" quat="0 0 0 1" mass="0.01" diaginertia="0.01 0.01 0.01" />
-                    <geom size="0.004 0.015 0.015" pos="0.003 0 0" quat="0 0 0 1" type="box" group="0" solref="0.01 0.5" friction="2 0.05 0.0001" conaffinity="1" contype="1" name="finger2_pad_collision"/>
+                    <geom size="0.004 0.015 0.015" pos="0.003 0 0" quat="0 0 0 1" type="box" group="0" solref="0.02 1" friction="2 0.005 0.0001" conaffinity="1" contype="1" name="finger2_pad_collision"/>
                 </body>
             </body>
         </body>
