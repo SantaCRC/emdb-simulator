@@ -126,14 +126,34 @@ class KitchenLift(Kitchen):
         )
         return cfgs
 
-    def _reset_internal(self):
-        super()._reset_internal()
-        # objects have settled onto the counter by this point; that resting
-        # height is the "not yet lifted" baseline _check_success compares against
-        self._obj_start_z = self.sim.data.body_xpos[self.obj_body_id["obj"]][2]
+    def reset(self):
+        # Just invalidates the cached baseline -- see _check_success() for
+        # why it's captured lazily instead of here.
+        obs = super().reset()
+        self._obj_start_z = None
+        return obs
 
     def _check_success(self):
-        if self._obj_start_z is None:
-            return False
+        # Baseline captured lazily, on the first real query after a reset,
+        # rather than eagerly in reset(). Eager capture (in _reset_internal()
+        # or reset() itself) is unreliable here: with collect_demos:=true,
+        # robosuite's DataCollectionWrapper._start_new_episode() (misc/
+        # robosuite/robosuite/wrappers/data_collection_wrapper.py:60-93,
+        # vendored, not edited) runs on the first post-reset interaction and
+        # calls env.reset_from_xml_string(), which rebuilds self.sim and
+        # calls self.reset() again -- with a fresh, unrelated random
+        # placement -- and only *afterwards* restores the actual intended
+        # state via sim.set_state_from_flattened(). Any baseline captured
+        # during that inner reset() is silently stale once the restore
+        # happens, and nothing re-syncs it. By the time anything outside
+        # robosuite/robocasa (e.g. scene_loader's render loop) can actually
+        # query _check_success(), that whole dance has already finished and
+        # self.sim reflects the final, correct state -- confirmed by logging
+        # obj_z at every render tick while debugging spurious "Success
+        # achieved!" reports: it was already stable and correct from the
+        # very first tick after "Scene loaded".
         obj_z = self.sim.data.body_xpos[self.obj_body_id["obj"]][2]
+        if self._obj_start_z is None:
+            self._obj_start_z = obj_z
+            return False
         return (obj_z - self._obj_start_z) > self.LIFT_HEIGHT

@@ -11,6 +11,7 @@ from collections import OrderedDict
 from glob import glob
 import traceback
 
+import h5py
 import numpy as np
 import rclpy
 from rclpy.node import Node
@@ -113,6 +114,13 @@ class SceneLoader(Node):
         self.demo_dir = self.get_parameter("demo_dir").value
         self.demo_tmp_directory = None
         self.env_info = None
+        # Per-step [obj_x, obj_y, obj_z, grasped] for the "obj" object,
+        # captured live during teleop recording (see
+        # _apply_env_action_and_publish) and keyed by DataCollectionWrapper's
+        # ep_directory for that episode. Merged into demo.hdf5 by
+        # _save_demos_cb so downstream consumers (emdb_policy's
+        # prepare_lift_demo_episodes) don't have to reconstruct/replay it.
+        self._demo_perception = {}
 
         self.record_video = bool(self.get_parameter("record_video").value)
         self.record_video_dir = self.get_parameter("record_video_dir").value
@@ -201,6 +209,10 @@ class SceneLoader(Node):
         # rl-mode heartbeat timer can re-publish it between steps without
         # re-stepping physics (see _mdb_perception_heartbeat).
         self._last_success = False
+        # Debounces "Success achieved!" in the teleop render loop to once per
+        # episode (rising edge only), instead of once per render tick for as
+        # long as _check_success() stays True.
+        self._teleop_success_logged = False
 
         self.layouts = self._build_layouts()
         self.styles = self._build_styles()
@@ -692,9 +704,41 @@ class SceneLoader(Node):
         self._publish_observation(obs)
         self._publish_step_info(reward, terminated=success, truncated=False, success=success)
         self._publish_progress(success)
+        if self.collect_demos:
+            self._capture_demo_perception()
         if not self.headless:
             self.env.render()
         self.video_recorder.capture_frame(self.env, success=success)
+
+    def _capture_demo_perception(self):
+        """Append this step's [obj_x, obj_y, obj_z, grasped] to
+        self._demo_perception, keyed by DataCollectionWrapper's ep_directory
+        for the current episode (set once the wrapper sees its first
+        interaction -- see DataCollectionWrapper._start_new_episode()).
+
+        Same computation _publish_object_states/_check_grasped already do
+        for the "obj" object; this just also keeps a copy around so
+        _save_demos_cb can merge it straight into demo.hdf5 later, instead
+        of some downstream consumer having to replay the episode to
+        reconstruct it (see kitchen_lift_task.py's DEFAULT_OBJ_GROUPS/
+        _get_obj_cfgs -- KitchenLift's only object is always named "obj").
+        """
+        ep_directory = getattr(self.env, "ep_directory", None)
+        if ep_directory is None:
+            return  # DataCollectionWrapper hasn't seen this episode's first interaction yet
+        # self.env.ep_directory is a full path (DataCollectionWrapper joins
+        # it with self.directory); key by the basename to match what
+        # os.listdir(directory) returns in _find_successful_episodes /
+        # _ordered_successful_episode_dirs / _merge_demo_perception.
+        ep_directory = os.path.basename(ep_directory)
+        obj_model = getattr(self.env, "objects", {}).get("obj")
+        if obj_model is None or not obj_model.joints:
+            return
+        qpos = self.env.sim.data.get_joint_qpos(obj_model.joints[0])
+        grasped = self._check_grasped("obj")
+        self._demo_perception.setdefault(ep_directory, []).append(
+            [float(qpos[0]), float(qpos[1]), float(qpos[2]), float(grasped)]
+        )
 
     def _mdb_perception_heartbeat(self):
         """Re-publish the current (cached) sensor state on a timer in rl mode.
@@ -845,6 +889,73 @@ class SceneLoader(Node):
                 successful.append(ep_directory)
         return successful
 
+    def _ordered_successful_episode_dirs(self, directory, successful_episodes):
+        """Replicates gather_demonstrations_as_hdf5's own directory
+        iteration order and non-empty-episode filter (robocasa/scripts/
+        collect_demos.py, vendored, not modified here) so this episode's
+        directory name can be matched to the demo_N group index that
+        function assigns it -- gather_demonstrations_as_hdf5 numbers output
+        groups purely by iteration order (num_eps += 1 per processed
+        episode) and never stores the source directory name anywhere
+        recoverable in the output hdf5.
+
+        Only reliable if called in the same process, right around the real
+        call, with nothing else writing to `directory` in between (true
+        here: both calls happen back-to-back inside _save_demos_cb).
+        """
+        ordered = []
+        for ep_directory in os.listdir(directory):
+            if ep_directory not in successful_episodes:
+                continue
+            state_paths = os.path.join(directory, ep_directory, "state_*.npz")
+            n_states = sum(
+                len(np.load(state_file, allow_pickle=True)["states"])
+                for state_file in sorted(glob(state_paths))
+            )
+            if n_states == 0:
+                continue
+            ordered.append(ep_directory)
+        return ordered
+
+    def _merge_demo_perception(self, hdf5_path, ordered_dirs):
+        """Adds mdb_obj_xyz/mdb_grasped datasets (captured live during
+        teleop, see _capture_demo_perception) to each demo_N group, so
+        downstream consumers (emdb_policy's prepare_lift_demo_episodes) get
+        ground-truth perception instead of having to replay the episode to
+        reconstruct it.
+        """
+        with h5py.File(hdf5_path, "a") as f:
+            for i, ep_directory in enumerate(ordered_dirs, start=1):
+                grp = f.get(f"data/demo_{i}")
+                perception = self._demo_perception.get(ep_directory)
+                if grp is None or not perception:
+                    self.get_logger().warning(
+                        f"No captured perception for demo_{i} (dir={ep_directory}); "
+                        "it will be missing mdb_obj_xyz/mdb_grasped."
+                    )
+                    continue
+                arr = np.array(perception, dtype=np.float64)
+                # No trim here (unlike gather_demonstrations_as_hdf5's own
+                # del states[-1]): robocasa's `states` array gets one entry
+                # *before* the first action too (captured in
+                # DataCollectionWrapper._on_first_interaction, then one more
+                # per action), hence one extra at the end relative to
+                # `actions`. Our capture (_capture_demo_perception) only
+                # appends *after* each action -- one entry per action,
+                # already the same length as `actions`, nothing to drop.
+                n_actions = grp["actions"].shape[0]
+                if arr.shape[0] != n_actions:
+                    self.get_logger().warning(
+                        f"demo_{i}: captured {arr.shape[0]} perception steps but "
+                        f"{n_actions} actions; skipping merge for it."
+                    )
+                    continue
+                for name in ("mdb_obj_xyz", "mdb_grasped"):
+                    if name in grp:
+                        del grp[name]
+                grp.create_dataset("mdb_obj_xyz", data=arr[:, :3])
+                grp.create_dataset("mdb_grasped", data=arr[:, 3])
+
     def _save_demos_cb(self, request, response):
         if not self.collect_demos:
             response.success = False
@@ -857,6 +968,9 @@ class SceneLoader(Node):
             os.makedirs(out_dir, exist_ok=True)
 
             successful_episodes = self._find_successful_episodes(self.demo_tmp_directory)
+            ordered_dirs = self._ordered_successful_episode_dirs(
+                self.demo_tmp_directory, successful_episodes
+            )
             hdf5_path = gather_demonstrations_as_hdf5(
                 self.demo_tmp_directory,
                 out_dir,
@@ -872,6 +986,7 @@ class SceneLoader(Node):
                 return response
 
             convert_to_robomimic_format(hdf5_path)
+            self._merge_demo_perception(hdf5_path, ordered_dirs)
 
             response.success = True
             response.message = (
@@ -1071,7 +1186,11 @@ class SceneLoader(Node):
                 if name and ("obj" in name or "distr" in name):
                     self.get_logger().debug(f"Joint {i}: {name}")
             if self.env._check_success():
-                self.get_logger().info("Success achieved!")
+                if not self._teleop_success_logged:
+                    self.get_logger().info("Success achieved!")
+                    self._teleop_success_logged = True
+            else:
+                self._teleop_success_logged = False
 
             if input_ac_dict is None:
                 self.env.reset()
@@ -1079,6 +1198,7 @@ class SceneLoader(Node):
                 self.device.clear_reset()
                 self.episode_id += 1
                 self.step_id = 0
+                self._teleop_success_logged = False
                 self.video_recorder.maybe_start_episode(self.episode_id)
                 return
 
@@ -1091,6 +1211,7 @@ class SceneLoader(Node):
                 self.device.clear_reset()
                 self.episode_id += 1
                 self.step_id = 0
+                self._teleop_success_logged = False
                 self.video_recorder.maybe_start_episode(self.episode_id)
 
         except Exception as e:
@@ -1139,14 +1260,14 @@ class SceneLoader(Node):
         self.timer.cancel()
         try:
             names = self._resolve_preview_camera_names()
-            saved = save_camera_previews(
+            saved = self._run_on_sim_thread(lambda: save_camera_previews(
                 self.env,
                 names,
                 self.record_video_dir,
                 self.record_video_width,
                 self.record_video_height,
                 logger=self.get_logger(),
-            )
+            ))
             self.get_logger().info(f"Camera preview saved {len(saved)} image(s): {saved}")
         except Exception as e:
             self.get_logger().error(f"Camera preview failed: {e}")

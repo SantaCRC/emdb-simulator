@@ -38,18 +38,13 @@ cameras:
     pos: [1.8, -1.8, 1.3]
     quat: [0.653, 0.271, 0.271, 0.653]
 
-  # A "rear view" of the robot, mirroring the default robot0_agentview_center
-  # (which is parented to mobilebase0_support, pos [-0.6, 0, 1.15]) but from
-  # the opposite side and pulled back a bit further so the whole robot fits
-  # in frame -- a naive 180deg mirror of that camera's own pose ends up
-  # aimed at the mirror image of its workspace, not centered on the robot,
-  # since the default isn't actually looking at the robot itself. This is a
-  # starting point, not a final answer: preview it and adjust pos/lookat
-  # until it frames the robot the way you want.
+  # A "rear view" of the robot, world-fixed (not parented to the robot base,
+  # so it won't track the robot across episodes/layouts). pos/quat were
+  # captured by hand-framing the shot in preview_camera_live and copying the
+  # resulting MuJoCo camera pose (pos + xyaxes, converted to quat).
   - name: robot0_agentview_center_rear
-    parent_body: mobilebase0_support
-    pos: [3.0, 0.0, 1.8]
-    lookat: [0.0, 0.0, 0.5]
+    pos: [3.481, -3.918, 0.983]
+    quat: [0.480936, 0.500199, 0.518952, 0.49919]
 
   # UNVERIFIED guess at a pulled-back "front view": mirroring pos.x off the
   # rear camera above ([-3.0, ...] instead of [3.0, ...]) actually rendered

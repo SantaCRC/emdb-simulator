@@ -34,6 +34,8 @@ setup(
             'policy_node = emdb_policy.policy_node:main',
             'train_sb3 = emdb_policy.train_sb3:main',
             'replay_demo = emdb_policy.replay_demo:main',
+            'prepare_lift_demo_episodes = emdb_policy.scripts.prepare_lift_demo_episodes:main',
+            'publish_demo_episodes = emdb_policy.publish_demo_episodes:main',
         ],
     },
 )
