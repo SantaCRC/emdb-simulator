@@ -112,9 +112,14 @@ def convert_episode(ep_grp, bounds, pos_scale, rot_scale, grasp_scale):
     ).astype(np.float32)
     actions_01 = unscale_action(actions_native, pos_scale, rot_scale, grasp_scale).astype(np.float32)
 
+    # mdb_obj_xyz/mdb_grasped[t] is the state *after* actions[t] was applied
+    # (scene_loader.py's _capture_demo_perception runs post-step, unlike
+    # robocasa's own pre-step-inclusive `states` convention) -- so transition
+    # i pairs (perceptions[i], actions[i+1]) -> perceptions[i+1], not
+    # (perceptions[i], actions[i]) -> perceptions[i+1].
     old_perception = perceptions[:-1]
     perception = perceptions[1:]
-    action = actions_01[:-1]
+    action = actions_01[1:]
     reward = np.zeros(n - 1, dtype=np.float32)
     done = np.zeros(n - 1, dtype=np.float32)
     if n > 1:
