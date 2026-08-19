@@ -43,8 +43,8 @@ ros2 run emdb_simulator scene_loader --ros-args \
 | `record_video_stride` | `1` | Capture every Nth simulation step (`1` = every step). |
 | `record_video_crf` | `18` | libx264 CRF quality (`0`=lossless, `18`=near-lossless, `23`=default, `51`=worst). |
 | `record_video_keep_successes` | `false` | Also keep any episode where the task succeeds, even outside `record_video_episodes`. See {doc}`recording_video` for the cost tradeoff. |
-| `preview_camera` | `false` | Debug dry-run: build the scene, save one PNG per camera under `record_video_dir`, log available camera names, then exit. No episode is stepped. Ignores `control_mode`/teleop. |
-| `preview_camera_names` | `all` | Cameras to preview: `all` or a comma-separated list of camera names. |
+| `preview_camera` | `false` | Open the interactive viewer fixed on the camera named in `preview_camera_names` instead of the normal render loop. No episode is recorded or stepped via `/step_action`. |
+| `preview_camera_names` | `all` | Camera to preview: `all`/empty for the default free camera, or a comma-separated list of camera names (only the first is used). |
 | `custom_cameras_file` | `""` | Path to a YAML file defining extra cameras. Empty = none. Only applied for `task=KitchenLift`. See {doc}`recording_video`. |
 
 ## Via the provided launch files

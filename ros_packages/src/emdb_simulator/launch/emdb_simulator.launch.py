@@ -23,7 +23,6 @@ def generate_launch_description():
     record_video_keep_successes = LaunchConfiguration('record_video_keep_successes')
     preview_camera = LaunchConfiguration('preview_camera')
     preview_camera_names = LaunchConfiguration('preview_camera_names')
-    preview_camera_live = LaunchConfiguration('preview_camera_live')
     custom_cameras_file = LaunchConfiguration('custom_cameras_file')
 
     return LaunchDescription([
@@ -107,23 +106,18 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'preview_camera',
             default_value='false',
-            description='Debug dry-run: build the scene, save one PNG per camera '
-                        '(see preview_camera_names) under record_video_dir, log the '
-                        'available camera names, then exit -- no episodes are recorded '
-                        'or stepped. Ignores control_mode/teleop.',
+            description='Open the interactive viewer fixed on the camera named in '
+                        'preview_camera_names (first name wins, no split-view for '
+                        "multiple names; empty/'all' uses the default free camera), "
+                        'replacing the normal teleop/rl render loop -- no episodes are '
+                        'recorded or stepped via /step_action while this is on.',
         ),
         DeclareLaunchArgument(
             'preview_camera_names',
             default_value='all',
-            description="Cameras to preview: 'all' (every camera in the loaded model) "
-                        "or a comma-separated list of camera names.",
-        ),
-        DeclareLaunchArgument(
-            'preview_camera_live',
-            default_value='false',
-            description='With preview_camera:=true, open the interactive viewer fixed on '
-                        'the camera instead of saving a PNG and exiting. Locks to the first '
-                        'name in preview_camera_names (no split-view for multiple names).',
+            description="Camera to preview with preview_camera:=true: 'all'/empty for "
+                        'the default free camera, or a comma-separated list of camera '
+                        'names (only the first is used).',
         ),
         DeclareLaunchArgument(
             'custom_cameras_file',
@@ -156,7 +150,6 @@ def generate_launch_description():
                 ),
                 'preview_camera': ParameterValue(preview_camera, value_type=bool),
                 'preview_camera_names': preview_camera_names,
-                'preview_camera_live': ParameterValue(preview_camera_live, value_type=bool),
                 'custom_cameras_file': custom_cameras_file,
             }],
         ),

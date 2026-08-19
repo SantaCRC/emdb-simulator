@@ -49,7 +49,6 @@ from emdb_simulator.core.camera_config import load_custom_cameras
 from emdb_simulator.core.video_recorder import (
     EpisodeRecordingSpec,
     VideoRecorder,
-    save_camera_previews,
 )
 from emdb_interfaces.msg import (
     ObjectState,
@@ -98,7 +97,6 @@ class SceneLoader(Node):
         self.declare_parameter("record_video_keep_successes", False)
         self.declare_parameter("preview_camera", False)
         self.declare_parameter("preview_camera_names", "all")
-        self.declare_parameter("preview_camera_live", False)
         self.declare_parameter("custom_cameras_file", "")
 
         self.task = self.get_parameter("task").value
@@ -136,7 +134,6 @@ class SceneLoader(Node):
         )
         self.preview_camera = bool(self.get_parameter("preview_camera").value)
         self.preview_camera_names = self.get_parameter("preview_camera_names").value
-        self.preview_camera_live = bool(self.get_parameter("preview_camera_live").value)
         self.custom_cameras_file = self.get_parameter("custom_cameras_file").value
         self.custom_cameras = load_custom_cameras(
             self.custom_cameras_file, logger=self.get_logger()
@@ -298,13 +295,9 @@ class SceneLoader(Node):
         except Exception:
             pass
 
-        if self.preview_camera and self.preview_camera_live:
+        if self.preview_camera:
             self.timer = self.create_timer(
                 1.0 / self.publish_rate, self._run_camera_preview_live,
-                callback_group=self._timer_cbgroup)
-        elif self.preview_camera:
-            self.timer = self.create_timer(
-                0.1, self._run_camera_preview_and_exit,
                 callback_group=self._timer_cbgroup)
         elif self.control_mode == "teleop":
             self.timer = self.create_timer(
@@ -412,12 +405,11 @@ class SceneLoader(Node):
         )
         self.get_logger().info(json.dumps(config))
 
-        live_preview = self.preview_camera and self.preview_camera_live
         self.env = robosuite.make(
             **config,
             has_renderer=not self.headless,
-            has_offscreen_renderer=self.record_video or (self.preview_camera and not live_preview),
-            render_camera=self._first_preview_camera_name() if live_preview else None,
+            has_offscreen_renderer=self.record_video,
+            render_camera=self._first_preview_camera_name() if self.preview_camera else None,
             ignore_done=True,
             use_camera_obs=False,
             control_freq=int(self.publish_rate),
@@ -1220,18 +1212,11 @@ class SceneLoader(Node):
             self.destroy_node()
             rclpy.shutdown()
 
-    def _resolve_preview_camera_names(self):
-        spec = (self.preview_camera_names or "").strip().lower()
-        if spec in ("", "all", "*"):
-            return list(self.env.sim.model.camera_names)
-        return [name.strip() for name in self.preview_camera_names.split(",") if name.strip()]
-
     def _first_preview_camera_name(self):
-        """Camera to fix the interactive mjviewer on for preview_camera_live.
+        """Camera to fix the interactive mjviewer on for preview_camera.
 
-        Called before self.env exists, so unlike _resolve_preview_camera_names
-        this can't expand "all" to the model's camera list -- "all"/empty
-        falls back to the default free camera instead.
+        Called before self.env exists, so "all"/empty falls back to the
+        default free camera instead of expanding to the model's camera list.
         """
         spec = (self.preview_camera_names or "").strip().lower()
         if spec in ("", "all", "*"):
@@ -1239,7 +1224,7 @@ class SceneLoader(Node):
         names = [name.strip() for name in self.preview_camera_names.split(",") if name.strip()]
         if len(names) > 1:
             self.get_logger().info(
-                "preview_camera_live shows one fixed camera at a time; "
+                "preview_camera shows one fixed camera at a time; "
                 f"using {names[0]!r} (first of {self.preview_camera_names!r})"
             )
         return names[0] if names else None
@@ -1253,26 +1238,6 @@ class SceneLoader(Node):
         except Exception as e:
             self.get_logger().error(f"Camera preview render failed: {e}")
             self.get_logger().error(traceback.format_exc())
-            self.destroy_node()
-            rclpy.shutdown()
-
-    def _run_camera_preview_and_exit(self):
-        self.timer.cancel()
-        try:
-            names = self._resolve_preview_camera_names()
-            saved = self._run_on_sim_thread(lambda: save_camera_previews(
-                self.env,
-                names,
-                self.record_video_dir,
-                self.record_video_width,
-                self.record_video_height,
-                logger=self.get_logger(),
-            ))
-            self.get_logger().info(f"Camera preview saved {len(saved)} image(s): {saved}")
-        except Exception as e:
-            self.get_logger().error(f"Camera preview failed: {e}")
-            self.get_logger().error(traceback.format_exc())
-        finally:
             self.destroy_node()
             rclpy.shutdown()
 

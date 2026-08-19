@@ -126,9 +126,8 @@ See {doc}`../howto/recording_video`.
 ## `emdb_simulator.core.video_recorder`
 
 Per-episode offscreen mp4 recording (`EpisodeRecordingSpec`,
-`VideoRecorder`) and the standalone camera-preview helper
-(`save_camera_previews`) driven by `scene_loader`'s `record_video`/
-`preview_camera` parameters. See {doc}`../howto/recording_video`.
+`VideoRecorder`) driven by `scene_loader`'s `record_video` parameter. See
+{doc}`../howto/recording_video`.
 
 ```{eval-rst}
 .. automodule:: emdb_simulator.core.video_recorder

@@ -11,11 +11,6 @@ explicit CRF (Constant Rate Factor), the same approach robosuite's own
 reference recording script uses (robosuite/demos/demo_video_recording.py)
 -- this gives real, controllable quality instead of cv2.VideoWriter's
 opaque, low-bitrate mp4v default.
-
-save_camera_previews() is a separate, stateless helper for the debug
-preview gallery: it renders one still PNG per requested camera name so a
-user can see where each camera actually points before running a real
-(possibly long) recorded rollout.
 """
 import os
 import time
@@ -320,30 +315,3 @@ class VideoRecorder:
 
     def close(self):
         self.close_episode()
-
-
-def save_camera_previews(env, camera_names, output_dir, width, height, logger=None):
-    """Render one still PNG per camera name for a quick "where does this
-    camera point" debug check, without recording a full episode.
-
-    A bad camera name only skips that one image (logged as a warning);
-    it never aborts the rest of the gallery. Returns the list of paths
-    that were successfully written.
-    """
-    t1, t2 = str(time.time()).split(".")
-    preview_dir = os.path.join(output_dir, f"camera_preview_{t1}_{t2}")
-    os.makedirs(preview_dir, exist_ok=True)
-
-    saved_paths = []
-    for name in camera_names:
-        path = os.path.join(preview_dir, f"{name}.png")
-        try:
-            rgb = env.sim.render(width=int(width), height=int(height), camera_name=name)
-            # Same upside-down fix as VideoRecorder.capture_frame.
-            imageio.imwrite(path, rgb[::-1])
-            saved_paths.append(path)
-        except Exception as exc:
-            if logger is not None:
-                logger.warning(f"Could not render camera preview for {name!r}: {exc}")
-
-    return saved_paths

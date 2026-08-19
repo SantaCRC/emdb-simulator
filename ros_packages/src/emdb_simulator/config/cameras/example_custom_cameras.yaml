@@ -40,7 +40,7 @@ cameras:
 
   # A "rear view" of the robot, world-fixed (not parented to the robot base,
   # so it won't track the robot across episodes/layouts). pos/quat were
-  # captured by hand-framing the shot in preview_camera_live and copying the
+  # captured by hand-framing the shot in preview_camera and copying the
   # resulting MuJoCo camera pose (pos + xyaxes, converted to quat).
   - name: robot0_agentview_center_rear
     pos: [3.481, -3.918, 0.983]

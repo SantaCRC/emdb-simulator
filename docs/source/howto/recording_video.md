@@ -9,43 +9,29 @@ opt-in. `has_offscreen_renderer` is only turned on when `record_video` or
 
 ## 1. Preview cameras before recording
 
-Before committing to a (possibly long) recorded rollout, check where each
-camera actually points:
+Before committing to a (possibly long) recorded rollout, check where a
+camera actually points: `preview_camera:=true` opens the interactive
+mjviewer window fixed on that camera's POV instead of running the normal
+teleop/rl render loop (needs a display — not for headless/cluster use).
+Keep it open and look around; **Ctrl+C** to stop.
 
 ```bash
 source env.sh
 ros2 launch emdb_simulator emdb_simulator.launch.py \
   preview_camera:=true \
-  preview_camera_names:=agentview,robot0_agentview_center
+  preview_camera_names:=robot0_agentview_center
 ```
-
-This builds the scene, saves one still PNG per requested camera under
-`record_video_dir/camera_preview_<timestamp>/<camera_name>.png`, logs the
-full list of available MuJoCo camera names, then **exits immediately**: no
-episode is stepped and `control_mode`/`teleop` are ignored.
 
 | Parameter | Default | Meaning |
 |---|---|---|
-| `preview_camera` | `false` | Enable the dry-run: build the scene, save previews, log camera names, exit. |
-| `preview_camera_names` | `all` | `all` (every camera in the loaded model) or a comma-separated list of camera names. |
-| `preview_camera_live` | `false` | With `preview_camera:=true`, open the interactive viewer fixed on the camera instead of saving a PNG and exiting. |
-
-Prefer to just look instead of saving a file? Add `preview_camera_live:=true`
-(needs a display — not for headless/cluster use). It locks the interactive
-viewer to the first name in `preview_camera_names` and keeps it open (Ctrl+C
-to stop) instead of saving and exiting:
-
-```bash
-ros2 launch emdb_simulator emdb_simulator.launch.py \
-  preview_camera:=true preview_camera_live:=true \
-  preview_camera_names:=robot0_agentview_center
-```
+| `preview_camera` | `false` | Open the interactive viewer fixed on the camera instead of the normal render loop. No episodes are recorded or stepped via `/step_action` while this is on. |
+| `preview_camera_names` | `all` | Camera to preview: `all`/empty for the default free camera, or a comma-separated list of camera names (only the first is used — no split-view). |
 
 ```{tip}
 The node also logs every available camera name on startup regardless of
 `preview_camera` (look for "Available MuJoCo cameras for
 record_video_camera: [...]"). This is useful if you just want the list
-without generating images.
+without opening the viewer.
 ```
 
 ## 2. Recording an episode run

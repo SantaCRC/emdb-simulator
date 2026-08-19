@@ -87,10 +87,10 @@ Owns the actual RoboCasa/robosuite `env`. The core node is
 - optionally renders offscreen and saves one mp4 per episode when
   `record_video:=true` ({py:class}`emdb_simulator.core.video_recorder.VideoRecorder`,
   driven by the episode-reset and per-step hooks), or, with
-  `preview_camera:=true`, short-circuits into a one-shot dry run that saves
-  a still PNG per camera and exits without stepping an episode
-  ({py:func}`emdb_simulator.core.video_recorder.save_camera_previews`).
-  `custom_cameras_file` (`task=KitchenLift` only) loads extra MuJoCo cameras
+  `preview_camera:=true`, replaces the normal teleop/rl render loop with an
+  interactive mjviewer window fixed on the named camera's POV, without
+  stepping/recording an episode. `custom_cameras_file` (`task=KitchenLift`
+  only) loads extra MuJoCo cameras
   from a YAML file via
   {py:func}`emdb_simulator.core.camera_config.load_custom_cameras` and
   appends them to the compiled model in `KitchenLift._load_model`. Offscreen
