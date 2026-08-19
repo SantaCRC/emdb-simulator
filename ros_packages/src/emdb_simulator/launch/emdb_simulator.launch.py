@@ -24,6 +24,7 @@ def generate_launch_description():
     preview_camera = LaunchConfiguration('preview_camera')
     preview_camera_names = LaunchConfiguration('preview_camera_names')
     custom_cameras_file = LaunchConfiguration('custom_cameras_file')
+    env_seed = LaunchConfiguration('env_seed')
 
     return LaunchDescription([
         DeclareLaunchArgument(
@@ -126,6 +127,17 @@ def generate_launch_description():
                         'config/cameras/example_custom_cameras.yaml). Empty = none. '
                         'Only supported for task=KitchenLift.',
         ),
+        DeclareLaunchArgument(
+            'env_seed',
+            default_value='-1',
+            description='RoboCasa Kitchen(seed=...) for reproducible object placement and '
+                        'robot start pose/facing. -1 (default) = unseeded (system entropy, '
+                        'varies every reset). A fixed seed reproduces the same starting '
+                        'configuration on every fresh launch of this node, but env.rng still '
+                        'advances across resets within one running session, so only the '
+                        "first episode after each launch is guaranteed to match -- restart "
+                        'with the same seed for an identical repeat.',
+        ),
         Node(
             package='emdb_simulator',
             executable='scene_loader',
@@ -151,6 +163,7 @@ def generate_launch_description():
                 'preview_camera': ParameterValue(preview_camera, value_type=bool),
                 'preview_camera_names': preview_camera_names,
                 'custom_cameras_file': custom_cameras_file,
+                'env_seed': ParameterValue(env_seed, value_type=int),
             }],
         ),
         Node(

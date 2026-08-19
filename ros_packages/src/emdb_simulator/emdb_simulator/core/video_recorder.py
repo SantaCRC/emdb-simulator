@@ -141,7 +141,12 @@ class VideoRecorder:
                 codec="libx264",
                 pixelformat="yuv420p",
                 quality=None,
-                output_params=["-crf", str(self.crf)],
+                # ultrafast trades away compression efficiency (bigger files
+                # at a given CRF) for encode speed -- worth it here since
+                # capture_frame() runs synchronously in the sim step loop, so
+                # slower presets directly cost simulation throughput, not
+                # just wall-clock time on some separate encoding job.
+                output_params=["-crf", str(self.crf), "-preset", "ultrafast"],
                 macro_block_size=None,
             )
         except Exception as exc:
