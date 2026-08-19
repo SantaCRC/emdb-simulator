@@ -9,3 +9,4 @@ line and don't remove the trailing marker comment.
 """
 from emdb_simulator.core import kitchen_lift_task  # noqa: F401  registers KitchenLift
 # --- new tasks are appended below this line by scripts/create_task.py ---
+from emdb_simulator.core import kitchen_place_task  # noqa: F401  registers KitchenPlace

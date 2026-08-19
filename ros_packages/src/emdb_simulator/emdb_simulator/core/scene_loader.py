@@ -98,6 +98,7 @@ class SceneLoader(Node):
         self.declare_parameter("preview_camera", False)
         self.declare_parameter("preview_camera_names", "all")
         self.declare_parameter("custom_cameras_file", "")
+        self.declare_parameter("env_seed", -1)
 
         self.task = self.get_parameter("task").value
         self.robot = self.get_parameter("robot").value
@@ -138,6 +139,15 @@ class SceneLoader(Node):
         self.custom_cameras = load_custom_cameras(
             self.custom_cameras_file, logger=self.get_logger()
         )
+        # -1 (default) means unseeded -- RoboCasa's Kitchen(seed=None) draws
+        # from system entropy, so object placement AND the robot's start
+        # pose/facing (both driven by env.rng, see RoboCasa's
+        # compute_robot_base_placement_pose) vary on every single reset, not
+        # just across layout/style choices. Pin a seed for reproducible
+        # testing (e.g. always spawning the robot facing the object the same
+        # way) without affecting anyone who leaves this at -1.
+        env_seed = int(self.get_parameter("env_seed").value)
+        self.env_seed = env_seed if env_seed >= 0 else None
 
         self.video_recorder = VideoRecorder(
             enabled=self.record_video,
@@ -395,6 +405,7 @@ class SceneLoader(Node):
             config["translucent_robot"] = False
             config["layout_ids"] = [self.layout_id]
             config["style_ids"] = [self.style_id]
+            config["seed"] = self.env_seed
         if self.task == "KitchenLift":
             # custom_cameras is a KitchenLift-specific constructor kwarg (see
             # kitchen_lift_task.py); other Kitchen-family tasks don't accept it.
@@ -653,6 +664,36 @@ class SceneLoader(Node):
 
         return self._build_env_action(active_robot, input_ac_dict)
 
+    def _augment_obs_with_control_frame(self, obs_dict):
+        """Add robot0_origin_ori (and dest_pos, for place-family tasks) to
+        obs_dict so a policy client can turn a world-frame position error
+        into the base-relative delta OSC_POSE actually expects.
+
+        OSC_POSE's input_ref_frame is "base" (see robosuite's
+        composite/basic.json): dx/dy/dz sent through /step_action get added
+        to the controller's goal in its "origin" frame, not world. That
+        origin is NOT the mobile base body -- robosuite's own
+        CompositeController.get_controller_base_pose() docstring warns "this
+        pose may likely differ from the robot base's pose": it's a
+        per-arm-controller "<naming_prefix><part_name>_center" site pose,
+        refreshed into part_controllers[arm].origin_ori every control step
+        (Robot.control() -> composite_controller.update_state(), see
+        robosuite/robots/robot.py). Published as the full 3x3 matrix (not a
+        derived yaw): this site's local axes aren't guaranteed to be a pure
+        rotation about world Z (e.g. an eef/arm-mount site convention can
+        have its own Z pointing along the arm's facing direction rather than
+        world-up), so a policy has to invert the whole matrix, not just an
+        angle. dest_pos comes straight from RoboCasa's Fixture.pos when the
+        task exposes one (e.g. KitchenPlace's self.dest).
+        """
+        robot = self.env.robots[0]
+        origin_ori = robot.part_controllers[robot.arms[0]].origin_ori
+        obs_dict["robot0_origin_ori"] = np.asarray(origin_ori, dtype=np.float64).flatten()
+        dest = getattr(self.env, "dest", None)
+        if dest is not None:
+            obs_dict["dest_pos"] = np.asarray(dest.pos, dtype=np.float64)
+        return obs_dict
+
     def _publish_observation(self, obs_dict):
         msg = Observation()
         msg.header.stamp = self.get_clock().now().to_msg()
@@ -693,7 +734,7 @@ class SceneLoader(Node):
 
         self._publish_joint_states()
         self._publish_object_states()
-        self._publish_observation(obs)
+        self._publish_observation(self._augment_obs_with_control_frame(obs))
         self._publish_step_info(reward, terminated=success, truncated=False, success=success)
         self._publish_progress(success)
         if self.collect_demos:
@@ -849,7 +890,7 @@ class SceneLoader(Node):
 
             self._publish_joint_states()
             self._publish_object_states()
-            self._publish_observation(obs)
+            self._publish_observation(self._augment_obs_with_control_frame(obs))
             self._publish_step_info(reward=0.0, terminated=False, truncated=False, success=False)
             self._publish_progress(False)
             self._last_success = False
