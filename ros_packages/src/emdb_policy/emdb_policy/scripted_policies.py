@@ -41,10 +41,31 @@ LIFT_HEIGHT = 0.12  # meters to raise above the grasp height
 PLACE_HOVER_HEIGHT = 0.15  # meters above dest_pos to transport at
 PLACE_LOWER_OFFSET = 0.05  # meters above dest_pos to lower to before releasing
 RELEASE_SETTLE_STEPS = 10
+BUTTON_APPROACH_THRESHOLD = 0.02  # meters, 3D distance (not just XY)
+ASK_NICELY_WAIT_STEPS = 30  # default idle duration for IdleMotion
 
 
-class ScriptedPolicyBase:
+class _FrameControlMixin:
+    """World-frame-error -> base-frame-delta p-control, shared by every
+    scripted state machine below (see module docstring for why the
+    origin_ori un-rotate + mirror_actions negation is needed)."""
+
+    def _to_base_frame(self, world_err, obs_dict):
+        origin_ori = obs_dict["robot0_origin_ori"].reshape(3, 3)
+        base_err = origin_ori.T @ world_err
+        return base_err * np.array([-1.0, -1.0, 1.0])  # undo mirror_actions=True
+
+    def _p_control(self, world_err, obs_dict, kp=4.0, max_delta=0.03):
+        base_err = self._to_base_frame(np.asarray(world_err, dtype=np.float64), obs_dict)
+        return np.clip(base_err * kp, -max_delta, max_delta)
+
+
+class ScriptedPolicyBase(_FrameControlMixin):
     """Shared APPROACH -> DESCEND -> GRASP -> LIFT state machine."""
+
+    # Overridden by subclasses that approach a differently-named object
+    # (e.g. FruitShop's PickFruitMotion reads "fruit_pos" instead of "obj_pos").
+    OBJ_POS_KEY = "obj_pos"
 
     STATE_APPROACH = "APPROACH"
     STATE_DESCEND = "DESCEND"
@@ -57,21 +78,12 @@ class ScriptedPolicyBase:
         self._counter = 0
         self._lift_start_z = None
 
-    def _to_base_frame(self, world_err, obs_dict):
-        origin_ori = obs_dict["robot0_origin_ori"].reshape(3, 3)
-        base_err = origin_ori.T @ world_err
-        return base_err * np.array([-1.0, -1.0, 1.0])  # undo mirror_actions=True
-
-    def _p_control(self, world_err, obs_dict, kp=4.0, max_delta=0.03):
-        base_err = self._to_base_frame(np.asarray(world_err, dtype=np.float64), obs_dict)
-        return np.clip(base_err * kp, -max_delta, max_delta)
-
     def policy_fn(self, obs_dict, rng):
         del rng  # deterministic policy
         return self._step(obs_dict)
 
     def _step(self, obs_dict):
-        obj_pos = obs_dict["obj_pos"]
+        obj_pos = obs_dict[self.OBJ_POS_KEY]
         eef_pos = obs_dict["robot0_eef_pos"]
         action6 = np.zeros(6)
         gripper_cmd = -1.0
@@ -160,3 +172,151 @@ class PlacePolicy(ScriptedPolicyBase):
                 self.state = self.STATE_DONE
 
         return np.concatenate([action6, [gripper_cmd]])
+
+
+# --- FruitShop motion primitives ---------------------------------------
+#
+# fruit_shop_bridge.py drives these one at a time, to completion, per
+# executed_policy_service call -- unlike PickAndLiftPolicy/PlacePolicy
+# (driven continuously across an episode by policy_node.py's PolicyRunner),
+# each of these is instantiated fresh, run via a small step loop, and
+# discarded. See fruit_shop_sim_discrete.py (paper_experiment/src/
+# emdb_develop) for the reference policy semantics these stand in for.
+
+
+class PickFruitMotion(ScriptedPolicyBase):
+    """Approach, grasp and lift the fruit (pick_fruit)."""
+
+    OBJ_POS_KEY = "fruit_pos"
+
+
+class TransportReleaseMotion(_FrameControlMixin):
+    """Carry an already-held object to TARGET_POS_KEY and release it.
+
+    Standalone TRANSPORT -> LOWER -> RELEASE -> DONE state machine, factored
+    out of PlacePolicy's tail so it can target different fixed zones
+    (scale_pos, accepted_pos, rejected_pos, placed_pos) without re-grasping
+    logic bundled in. Assumes the gripper is already closed around the
+    object when on_episode_start() is called -- there is no physical
+    teleport between zones, so accept_fruit/discard_fruit re-grasp from the
+    scale via a fresh PickFruitMotion before chaining into this.
+    """
+
+    TARGET_POS_KEY = "dest_pos"
+
+    STATE_TRANSPORT = "TRANSPORT"
+    STATE_LOWER = "LOWER"
+    STATE_RELEASE = "RELEASE"
+    STATE_DONE = "DONE"
+
+    def __init__(self, target_pos_key=None):
+        if target_pos_key is not None:
+            self.TARGET_POS_KEY = target_pos_key
+
+    def on_episode_start(self):
+        self.state = self.STATE_TRANSPORT
+        self._counter = 0
+
+    def policy_fn(self, obs_dict, rng):
+        del rng
+        return self._step(obs_dict)
+
+    def _step(self, obs_dict):
+        eef_pos = obs_dict["robot0_eef_pos"]
+        target_pos = obs_dict[self.TARGET_POS_KEY]
+        action6 = np.zeros(6)
+        gripper_cmd = 1.0
+
+        if self.state == self.STATE_TRANSPORT:
+            target = target_pos + np.array([0, 0, PLACE_HOVER_HEIGHT])
+            err = target - eef_pos
+            action6[:3] = self._p_control(err, obs_dict)
+            if np.linalg.norm(err[:2]) < XY_APPROACH_THRESHOLD and abs(err[2]) < 0.03:
+                self.state = self.STATE_LOWER
+
+        elif self.state == self.STATE_LOWER:
+            target = target_pos + np.array([0, 0, PLACE_LOWER_OFFSET])
+            err = target - eef_pos
+            action6[:3] = self._p_control(err, obs_dict)
+            if np.linalg.norm(err) < Z_DESCEND_THRESHOLD:
+                self.state = self.STATE_RELEASE
+                self._counter = 0
+
+        elif self.state == self.STATE_RELEASE:
+            gripper_cmd = -1.0
+            self._counter += 1
+            if self._counter >= RELEASE_SETTLE_STEPS:
+                self.state = self.STATE_DONE
+
+        elif self.state == self.STATE_DONE:
+            gripper_cmd = -1.0
+
+        return np.concatenate([action6, [gripper_cmd]])
+
+
+class ApproachOnlyMotion(_FrameControlMixin):
+    """Move the eef to TARGET_POS_KEY and hold; no grasp change.
+
+    Used for press_button: the arm just has to reach a fixed point, nothing
+    is picked up or released. gripper_closed reflects whatever the caller
+    is currently holding (or not) so this doesn't accidentally open/close
+    on an unrelated object mid-approach.
+    """
+
+    TARGET_POS_KEY = "button_pos"
+
+    STATE_APPROACH = "APPROACH"
+    STATE_DONE = "DONE"
+
+    def __init__(self, target_pos_key=None):
+        if target_pos_key is not None:
+            self.TARGET_POS_KEY = target_pos_key
+
+    def on_episode_start(self, gripper_closed=False):
+        self.state = self.STATE_APPROACH
+        self._gripper_cmd = 1.0 if gripper_closed else -1.0
+
+    def policy_fn(self, obs_dict, rng):
+        del rng
+        return self._step(obs_dict)
+
+    def _step(self, obs_dict):
+        eef_pos = obs_dict["robot0_eef_pos"]
+        target_pos = obs_dict[self.TARGET_POS_KEY]
+        action6 = np.zeros(6)
+
+        if self.state == self.STATE_APPROACH:
+            err = target_pos - eef_pos
+            action6[:3] = self._p_control(err, obs_dict)
+            if np.linalg.norm(err) < BUTTON_APPROACH_THRESHOLD:
+                self.state = self.STATE_DONE
+
+        return np.concatenate([action6, [self._gripper_cmd]])
+
+
+class IdleMotion:
+    """Hold position and the current gripper state for wait_steps ticks.
+
+    Physical stand-in for ask_nicely (no second arm to hand off to, so the
+    single-arm adaptation scripts this as an idle wait) and for test_fruit's
+    "observe the fruit" phase.
+    """
+
+    STATE_WAIT = "WAIT"
+    STATE_DONE = "DONE"
+
+    def __init__(self, wait_steps=ASK_NICELY_WAIT_STEPS):
+        self.wait_steps = wait_steps
+
+    def on_episode_start(self, gripper_closed=False):
+        self.state = self.STATE_WAIT
+        self._counter = 0
+        self._gripper_cmd = 1.0 if gripper_closed else -1.0
+
+    def policy_fn(self, obs_dict, rng):
+        del obs_dict, rng
+        if self.state == self.STATE_WAIT:
+            self._counter += 1
+            if self._counter >= self.wait_steps:
+                self.state = self.STATE_DONE
+        return np.concatenate([np.zeros(6), [self._gripper_cmd]])

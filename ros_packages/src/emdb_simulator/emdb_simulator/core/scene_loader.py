@@ -689,9 +689,31 @@ class SceneLoader(Node):
         robot = self.env.robots[0]
         origin_ori = robot.part_controllers[robot.arms[0]].origin_ori
         obs_dict["robot0_origin_ori"] = np.asarray(origin_ori, dtype=np.float64).flatten()
+        obs_dict["robot_base_pos"] = np.asarray(robot.base_pos, dtype=np.float64)
         dest = getattr(self.env, "dest", None)
         if dest is not None:
             obs_dict["dest_pos"] = np.asarray(dest.pos, dtype=np.float64)
+
+        # Generic pass-through for any task-exposed "<name>_pos" property
+        # (e.g. FruitShop's collection_pos/accepted_pos/rejected_pos/
+        # placed_pos/button_pos, all computed fixture-relative since
+        # RoboCasa kitchens are procedurally laid out per episode) -- same
+        # role as dest_pos above, generalized so new tasks don't need their
+        # own scene_loader changes for fixed, fixture-relative target zones.
+        for zone_attr in getattr(self.env, "OBS_ZONE_ATTRS", ()):
+            value = getattr(self.env, zone_attr, None)
+            if value is not None:
+                obs_dict[zone_attr] = np.asarray(value, dtype=np.float64)
+
+        # scale_pos: unlike dest (a static Fixture with a cached .pos), the
+        # FruitShop "scale" is a spawned object -- its pose has to be read
+        # live from sim.data, not cached.
+        if "scale" in getattr(self.env, "objects", {}):
+            scale_body_id = self.env.obj_body_id["scale"]
+            obs_dict["scale_pos"] = np.asarray(
+                self.env.sim.data.body_xpos[scale_body_id], dtype=np.float64
+            )
+
         return obs_dict
 
     def _publish_observation(self, obs_dict):
