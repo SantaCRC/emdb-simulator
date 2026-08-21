@@ -213,6 +213,11 @@ class FruitShopBridge(Node):
                 callback_group=self.cbgroup_server,
             )
 
+        if service_policy:
+            self.perceptions_timer = self.create_timer(
+                0.01, self.publish_perceptions, callback_group=self.cbgroup_server
+            )
+
     def load_experiment_file_in_commander(self):
         self.load_client = ServiceClient(LoadConfig, "commander/load_experiment")
         return self.load_client.send_request(file=self.config_file)
