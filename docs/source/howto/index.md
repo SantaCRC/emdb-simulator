@@ -13,6 +13,7 @@ recording_video
 training_rl
 replaying_demos
 creating_tasks
+creating_objects
 managing_robots
 running_on_cesga
 ```
@@ -25,5 +26,6 @@ running_on_cesga
 | Train an RL policy against the simulator | {doc}`training_rl` |
 | Sanity-check a recorded demo against the ROS interface | {doc}`replaying_demos` |
 | Add a new task without writing robosuite code | {doc}`creating_tasks` |
+| Register a new graspable object | {doc}`creating_objects` |
 | View, tweak, or create a robot | {doc}`managing_robots` |
 | Run experiments on CESGA's FinisTerraeIII HPC cluster | {doc}`running_on_cesga` |

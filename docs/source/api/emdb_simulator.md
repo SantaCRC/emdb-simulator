@@ -109,6 +109,20 @@ layouts/styles, with robosuite as an import side effect; imported by
    :show-inheritance:
 ```
 
+## `emdb_simulator.core.cube_object`
+
+Registers a "cube" test object (5x5x5cm, sized to fit `TwoFG7Gripper`'s
+~31mm jaw opening) into robocasa's own `OBJ_CATEGORIES`/`OBJ_GROUPS` dicts
+as an import side effect, without modifying the `misc/robocasa` submodule.
+Imported by `kitchen_lift_task`. See {doc}`../howto/creating_objects`.
+
+```{eval-rst}
+.. automodule:: emdb_simulator.core.cube_object
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
 ## `emdb_simulator.core.camera_config`
 
 Loads and validates user-defined custom MuJoCo cameras from the

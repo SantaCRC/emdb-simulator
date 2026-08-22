@@ -50,7 +50,19 @@ Owns the actual RoboCasa/robosuite `env`. The core node is
   imports {py:mod}`emdb_simulator.core.gripper_loader`, which registers
   `TwoFG7Gripper` (`UR5eOmron`'s default gripper). New robots/tasks created
   via {doc}`howto/managing_robots`/{doc}`howto/creating_tasks` are appended
-  to these registries automatically,
+  to these registries automatically. Objects (the things a task spawns) are
+  registered the same way but have no dedicated registry module yet -- see
+  {doc}`howto/creating_objects`,
+- everything that touches the MuJoCo/GLFW render context (`env.reset()`,
+  `step()`, `render()`) runs on a single thread: the one that called
+  `robosuite.make()` at startup. ROS itself spins on a separate background
+  thread (`MultiThreadedExecutor`, so RL mode's perception timers don't
+  starve service callbacks), so every service/timer callback that touches
+  `self.env` routes through `_run_on_sim_thread`, which queues the call and
+  blocks the caller until the sim thread's `run_sim_loop()` drains it. This
+  isn't optional bookkeeping: with the on-screen `mjviewer` renderer,
+  calling into MuJoCo/GLFW from any other thread hangs forever with no
+  exception,
 - runs in one of two mutually exclusive **`control_mode`**s:
   - `teleop` (default): a timer loop at `publish_rate` Hz reads the last
     keyboard-driven delta from `ROSKeyboardDevice`, steps the env, and
@@ -58,7 +70,16 @@ Owns the actual RoboCasa/robosuite `env`. The core node is
     rejected in this mode.
   - `rl`: the periodic render loop is disabled entirely; physics only
     advances when `/step_action` or `/step_action_raw` is called, so an
-    external agent has full control over the step cadence.
+    external agent has full control over the step cadence. A separate,
+    lighter periodic timer still re-publishes the *current* (cached) joint
+    states, object states, and progress/success in this mode, without
+    stepping physics -- otherwise a perception read between two
+    `/step_action` calls would have nothing to return. `perception_mode:=mdb`
+    gets its own variant of this heartbeat (`_mdb_perception_heartbeat`) so
+    e-MDB's main loop, which expects perceptions to keep flowing
+    continuously the way the teleop render loop does, doesn't deadlock
+    waiting on a value that would otherwise only arrive on the next step it
+    has to trigger itself.
 - publishes `/joint_states` (`sensor_msgs/JointState`), object poses
   (`emdb_interfaces/ObjectStateArray`), `/observations`
   (`emdb_interfaces/Observation`, the flattened robosuite `obs_dict`), and

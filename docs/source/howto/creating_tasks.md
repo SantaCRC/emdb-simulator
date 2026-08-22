@@ -37,9 +37,12 @@ below.
     tasks the other two templates can't express. You (or an LLM/coding
     agent, see {doc}`../llms`) fill in the three stub methods by hand
     afterward.
-- **Object group(s)**: comma-separated, e.g. `straw,peeler,sugar_cube`.
-  Keep them small: the project's gripper (`TwoFG7Gripper`) only opens
-  ~31mm, so most full-size kitchen items won't fit its jaws.
+- **Object group(s)**: comma-separated, e.g. `cube` (the project's own
+  purpose-built test object, `KitchenLift`'s current default) or
+  `straw,peeler,sugar_cube` (verified small RoboCasa categories). Keep them
+  small: the project's gripper (`TwoFG7Gripper`) only opens ~31mm, so most
+  full-size kitchen items won't fit its jaws. See {doc}`creating_objects` to
+  register a new one.
 - **Fixture(s)**: picked from a numbered menu (island, counter, cabinet,
   sink, ...), not typed by hand, so you can't typo a fixture name. `lift`
   asks for one (where the object spawns); `place` asks for two (source and
