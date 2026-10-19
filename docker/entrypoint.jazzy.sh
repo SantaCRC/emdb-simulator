@@ -42,21 +42,30 @@ export MUJOCO_GL="${MUJOCO_GL:-osmesa}"
 # never have to remember a sidecar process themselves. Harmless to start
 # even if RMW_IMPLEMENTATION was overridden away from Zenoh at `docker
 # run`/`singularity exec --env` time -- an unused router just idles.
-ros2 run rmw_zenoh_cpp rmw_zenohd &
-ZENOHD_PID=$!
-tries=50
-while [ "$tries" -gt 0 ] && ! (exec 3<>"/dev/tcp/127.0.0.1/7447") 2>/dev/null; do
-    sleep 0.1
-    tries=$((tries - 1))
-done
-exec 3>&- 2>/dev/null || true
-if [ "$tries" -eq 0 ]; then
-    echo "entrypoint.jazzy.sh: rmw_zenohd did not come up on 127.0.0.1:7447 after 5s" >&2
-    exit 1
+#
+# Only start one if port 7447 isn't already taken: hpc/cesga jobs that run
+# multiple containers on the same node share its network namespace (no
+# --net isolation, see docs/source/howto/running_on_cesga.md's
+# cesga-with-architecture section), so a second container's entrypoint
+# would otherwise race to bind the same port and fail with "Address
+# already in use" -- confirmed by hand on CESGA's login node. One router
+# per node is correct and sufficient; every container's nodes just talk
+# to whichever one got there first.
+if ! (exec 3<>"/dev/tcp/127.0.0.1/7447") 2>/dev/null; then
+    ros2 run rmw_zenoh_cpp rmw_zenohd &
+    tries=50
+    while [ "$tries" -gt 0 ] && ! (exec 3<>"/dev/tcp/127.0.0.1/7447") 2>/dev/null; do
+        sleep 0.1
+        tries=$((tries - 1))
+    done
+    if [ "$tries" -eq 0 ]; then
+        echo "entrypoint.jazzy.sh: rmw_zenohd did not come up on 127.0.0.1:7447 after 5s" >&2
+        exit 1
+    fi
 fi
-# Zenoh router runs for the lifetime of the container; no separate
-# teardown step needed -- it exits with the rest of the process tree.
-unset ZENOHD_PID
+exec 3>&- 2>/dev/null || true
+# Zenoh router runs for the lifetime of whichever container started it;
+# no separate teardown step needed here.
 
 # 4. Rebuild ros_packages if it looks unbuilt or stale (same as
 #    entrypoint.sh).
