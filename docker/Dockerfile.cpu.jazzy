@@ -1,0 +1,110 @@
+# CPU-only image for running the emdb-simulator workspace headlessly, e.g.
+# via Singularity on CESGA (see docs/source/howto/running_on_cesga.md).
+# Jazzy + Zenoh twin of Dockerfile.cpu (kept on Humble + CycloneDDS so both
+# can be compared side by side) -- see that file for the full rationale
+# behind every step; comments here only call out what's different.
+# Published as santacrc/emdb_simulator_cpu:jazzy by .github/workflows/docker.yml.
+#
+# Build from the REPO ROOT (not this docker/ directory), with submodules
+# already checked out:
+#   git submodule update --init --recursive
+#   docker build -f docker/Dockerfile.cpu.jazzy -t santacrc/emdb_simulator_cpu:jazzy .
+
+FROM ros:jazzy-ros-base
+
+SHELL ["/bin/bash", "-c"]
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    LANG=en_US.UTF-8
+
+# ---------------------------------------------------------------------------
+# 1. System packages. Same list as Dockerfile.cpu, with ros-jazzy-* instead
+#    of ros-humble-*:
+#    - ros-jazzy-ament-cmake: ros:jazzy-ros-base is runtime-only, same gap
+#      as the Humble image (needed by emdb_interfaces's ament_cmake build).
+#    - ros-jazzy-rmw-zenoh-cpp: swaps CycloneDDS for Zenoh as the RMW
+#      implementation. Unlike CycloneDDS's automatic P2P discovery, Zenoh
+#      needs a router (`rmw_zenohd`) running for nodes to find each other
+#      -- entrypoint.jazzy.sh starts it, mirroring how it already starts
+#      Xvfb.
+# ---------------------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3-venv \
+        python3-pip \
+        git \
+        build-essential \
+        curl \
+        xvfb \
+        libosmesa6 \
+        libosmesa6-dev \
+        libgl1 \
+        libglx-mesa0 \
+        ffmpeg \
+        python3-rosdep \
+        ros-jazzy-ament-cmake \
+        ros-jazzy-rmw-zenoh-cpp \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN [ -f /etc/ros/rosdep/sources.list.d/20-default.list ] || rosdep init; \
+    rosdep update
+
+WORKDIR /opt/emdb
+COPY . .
+
+# ---------------------------------------------------------------------------
+# 2. Python virtualenv (same as Dockerfile.cpu).
+# ---------------------------------------------------------------------------
+RUN python3 -m venv --system-site-packages /opt/emdb/.venv
+ENV PATH="/opt/emdb/.venv/bin:${PATH}"
+RUN pip install --upgrade pip wheel setuptools
+
+# ---------------------------------------------------------------------------
+# 3. CPU-only torch pin (same rationale as Dockerfile.cpu).
+# ---------------------------------------------------------------------------
+RUN pip install torch==2.7.1+cpu torchvision==0.22.1+cpu \
+        --index-url https://download.pytorch.org/whl/cpu
+
+# ---------------------------------------------------------------------------
+# 4. robosuite / robocasa / (optional) robosuite_models, editable installs.
+# ---------------------------------------------------------------------------
+RUN pip install -e misc/robosuite -e misc/robocasa
+RUN if [ -n "$(ls -A misc/robosuite_models 2>/dev/null)" ]; then \
+        pip install -e misc/robosuite_models || \
+            echo "robosuite_models install failed (optional) -- continuing"; \
+    else \
+        echo "misc/robosuite_models is empty, skipping (optional)"; \
+    fi
+
+# stable-baselines3 pinned below 2.9: that release bumped its torch
+# requirement to >=2.8, which silently upgrades the CPU-only torch==2.7.1
+# pin above to a CUDA build on `pip install` (and conflicts with
+# robocasa's lerobot==0.3.3, which needs torch<2.8). 2.8.0 is the latest
+# release still compatible with torch<3.0,>=2.3.
+RUN pip install gymnasium "stable-baselines3==2.8.0"
+
+# colcon must be importable via the venv's python. Jazzy's rosidl_adapter
+# (unlike Humble's) does not need the empy==3.3.4 pin -- it works with
+# whatever current EmPy colcon-common-extensions pulls in.
+RUN pip install colcon-common-extensions
+
+RUN rosdep install --from-paths /opt/emdb/ros_packages/src --ignore-src -r -y
+
+# ---------------------------------------------------------------------------
+# 5. Asset mount point -- see Dockerfile.cpu step 5 for the full rationale.
+#    No RUN needed: assets/ already exists after COPY.
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# 6. Build the ROS 2 workspace -- see Dockerfile.cpu step 6 for rationale.
+# ---------------------------------------------------------------------------
+RUN . /opt/ros/jazzy/setup.bash && \
+    cd ros_packages && python -m colcon build --symlink-install
+
+COPY docker/entrypoint.jazzy.sh /opt/emdb/entrypoint.sh
+RUN chmod +x /opt/emdb/entrypoint.sh
+
+ENV MUJOCO_GL=osmesa \
+    RMW_IMPLEMENTATION=rmw_zenoh_cpp
+
+ENTRYPOINT ["/opt/emdb/entrypoint.sh"]
+CMD ["bash"]
