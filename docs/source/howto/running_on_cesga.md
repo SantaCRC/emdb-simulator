@@ -108,6 +108,26 @@ ln -s $STORE/emdb_simulator_cpu.sif $HOME/
 # ln -s $STORE/emdb_simulator_gpu.sif $HOME/
 ```
 
+```{note}
+**Jazzy + Zenoh variants.** [`docker/Dockerfile.cpu.jazzy`](../../../docker/Dockerfile.cpu.jazzy)/[`.gpu.jazzy`](../../../docker/Dockerfile.gpu.jazzy)
+are ROS 2 Jazzy + `rmw_zenoh_cpp` twins of the Humble + CycloneDDS images
+above, built from the same CI workflow and published under a `:jazzy` tag
+instead of `:latest`:
+
+```bash
+singularity pull --force $STORE/emdb_simulator_cpu_jazzy.sif docker://santacrc/emdb_simulator_cpu:jazzy   # CPU
+# singularity pull --force $STORE/emdb_simulator_gpu_jazzy.sif docker://santacrc/emdb_simulator_gpu:jazzy # GPU
+```
+
+No extra bind-mount or launch steps versus the Humble images -- the Zenoh
+router (`rmw_zenohd`) that `rmw_zenoh_cpp` needs for node discovery (unlike
+CycloneDDS's automatic P2P) is started inside the container by
+[`docker/entrypoint.jazzy.sh`](../../../docker/entrypoint.jazzy.sh), the
+same way the existing images already self-start `Xvfb`. Everything else in
+this guide (asset priming, `hpc/cesga/*.sbatch`, results layout) applies
+unchanged -- just point `CONTAINER_IMAGE` at the `_jazzy.sif` file instead.
+```
+
 ## 3. One-time kitchen-asset priming
 
 RoboCasa's ~10GB of kitchen assets (textures, fixtures, objects) are
