@@ -1,4 +1,5 @@
 # EMDB Simulator
+[![CI](https://github.com/SantaCRC/emdb-simulator/actions/workflows/ci.yml/badge.svg)](https://github.com/SantaCRC/emdb-simulator/actions/workflows/ci.yml)
 [![Docs](https://github.com/SantaCRC/emdb-simulator/actions/workflows/docs.yml/badge.svg)](https://github.com/SantaCRC/emdb-simulator/actions/workflows/docs.yml)
 [![Docker](https://github.com/SantaCRC/emdb-simulator/actions/workflows/docker.yml/badge.svg)](https://github.com/SantaCRC/emdb-simulator/actions/workflows/docker.yml)
 

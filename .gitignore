@@ -27,3 +27,7 @@ graft/
 /results
 /old
 /emdb_videos
+# test/coverage output
+.coverage
+coverage.xml
+.pytest_cache/

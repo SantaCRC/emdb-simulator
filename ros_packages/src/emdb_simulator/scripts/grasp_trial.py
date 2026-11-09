@@ -45,7 +45,8 @@ def _terminate_process_group(proc, timeout):
     plain proc.terminate() (SIGTERM to the immediate ros2-run child only)
     never reaches, leaving it orphaned and running. start_new_session=True
     at Popen time puts the whole tree in its own process group so a signal
-    to -pgid reaches all of it."""
+    to -pgid reaches all of it.
+    """
     try:
         pgid = os.getpgid(proc.pid)
     except ProcessLookupError:

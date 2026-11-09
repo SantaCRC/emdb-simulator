@@ -1,0 +1,129 @@
+# GPU (CUDA) image for running the emdb-simulator workspace headlessly with
+# EGL-accelerated rendering, e.g. via Singularity's --nv on CESGA (see
+# docs/source/howto/running_on_cesga.md). Jazzy + Zenoh twin of
+# Dockerfile.gpu (kept on Humble + CycloneDDS so both can be compared side
+# by side) -- see that file for the full rationale behind every step;
+# comments here only call out what's different.
+# Published as santacrc/emdb_simulator_gpu:jazzy by .github/workflows/docker.yml.
+#
+# Build from the REPO ROOT (not this docker/ directory), with submodules
+# already checked out:
+#   git submodule update --init --recursive
+#   docker build -f docker/Dockerfile.gpu.jazzy -t santacrc/emdb_simulator_gpu:jazzy .
+#
+# Jazzy's apt packages target Ubuntu 24.04 (Noble), not 22.04 (Jammy) --
+# the CUDA base image moves accordingly (12.8.2, matching CESGA's `module
+# load cuda/12.8`; Docker Hub doesn't publish nvidia/cuda:12.1.x-* tags on
+# an ubuntu24.04 base, only 12.8+). Still no proprietary NVIDIA driver/EGL
+# bits baked in, same as Dockerfile.gpu -- supplied at run time by
+# Singularity's --nv / Docker's --gpus all.
+
+FROM nvidia/cuda:12.8.2-runtime-ubuntu24.04
+
+SHELL ["/bin/bash", "-c"]
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    LANG=en_US.UTF-8
+
+# ---------------------------------------------------------------------------
+# 1. ROS 2 Jazzy. Same bootstrap as Dockerfile.gpu, just resolving
+#    $UBUNTU_CODENAME to "noble" instead of "jammy", and ros-jazzy-* +
+#    rmw_zenoh_cpp instead of ros-humble-* + CycloneDDS (see
+#    Dockerfile.cpu.jazzy's header comment for why Zenoh needs a router).
+# ---------------------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl \
+        gnupg2 \
+        lsb-release \
+        locales \
+    && locale-gen en_US en_US.UTF-8 \
+    && update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 \
+    && curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
+        -o /usr/share/keyrings/ros-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" \
+        > /etc/apt/sources.list.d/ros2.list \
+    && apt-get update && apt-get install -y --no-install-recommends \
+        ros-jazzy-ros-base \
+        ros-jazzy-ament-cmake \
+        ros-jazzy-rmw-zenoh-cpp \
+        python3-rosdep \
+        python3-colcon-common-extensions \
+    && rm -rf /var/lib/apt/lists/*
+
+# ---------------------------------------------------------------------------
+# 2. Remaining system packages (same as Dockerfile.gpu).
+# ---------------------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3-venv \
+        python3-pip \
+        git \
+        build-essential \
+        xvfb \
+        ffmpeg \
+        libegl1 \
+        libgl1 \
+        libopengl0 \
+        libglvnd0 \
+        libgles2 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN [ -f /etc/ros/rosdep/sources.list.d/20-default.list ] || rosdep init; \
+    rosdep update
+
+WORKDIR /opt/emdb
+COPY . .
+
+# ---------------------------------------------------------------------------
+# 3. Python virtualenv (same rationale as Dockerfile.gpu).
+# ---------------------------------------------------------------------------
+RUN python3 -m venv --system-site-packages /opt/emdb/.venv
+ENV PATH="/opt/emdb/.venv/bin:${PATH}"
+RUN pip install --upgrade pip wheel setuptools
+
+# ---------------------------------------------------------------------------
+# 4. CUDA-enabled torch (same pin as Dockerfile.gpu).
+# ---------------------------------------------------------------------------
+RUN pip install torch==2.7.1 torchvision==0.22.1
+
+# ---------------------------------------------------------------------------
+# 5. robosuite / robocasa / (optional) robosuite_models, editable installs.
+# ---------------------------------------------------------------------------
+RUN pip install -e misc/robosuite -e misc/robocasa
+RUN if [ -n "$(ls -A misc/robosuite_models 2>/dev/null)" ]; then \
+        pip install -e misc/robosuite_models || \
+            echo "robosuite_models install failed (optional) -- continuing"; \
+    else \
+        echo "misc/robosuite_models is empty, skipping (optional)"; \
+    fi
+
+# stable-baselines3 pinned below 2.9: that release bumped its torch
+# requirement to >=2.8, which would upgrade the torch==2.7.1 pin above and
+# conflict with robocasa's lerobot==0.3.3 (needs torch<2.8). 2.8.0 is the
+# latest release still compatible with torch<3.0,>=2.3.
+RUN pip install gymnasium "stable-baselines3==2.8.0"
+
+# colcon must be importable via the venv's python. Jazzy's rosidl_adapter
+# (unlike Humble's) does not need the empy==3.3.4 pin.
+RUN pip install colcon-common-extensions
+
+RUN rosdep install --from-paths /opt/emdb/ros_packages/src --ignore-src -r -y
+
+# ---------------------------------------------------------------------------
+# 6. Asset mount point -- see Dockerfile.cpu step 5 for the full rationale.
+#    No RUN needed: assets/ already exists after COPY.
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# 7. Build the ROS 2 workspace -- see Dockerfile.cpu step 6 for rationale.
+# ---------------------------------------------------------------------------
+RUN . /opt/ros/jazzy/setup.bash && \
+    cd ros_packages && python -m colcon build --symlink-install
+
+COPY docker/entrypoint.jazzy.sh /opt/emdb/entrypoint.sh
+RUN chmod +x /opt/emdb/entrypoint.sh
+
+ENV MUJOCO_GL=egl \
+    RMW_IMPLEMENTATION=rmw_zenoh_cpp
+
+ENTRYPOINT ["/opt/emdb/entrypoint.sh"]
+CMD ["bash"]

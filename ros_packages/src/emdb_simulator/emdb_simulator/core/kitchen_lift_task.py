@@ -5,7 +5,7 @@ robosuite's REGISTERED_ENVS (via robosuite's EnvMeta), so it must be
 imported before robosuite.make() is called with this env name.
 """
 from robocasa.environments.kitchen.kitchen import *
-from emdb_simulator.core.cube_object import OBJ_CATEGORIES, OBJ_GROUPS
+from emdb_simulator.core.cube_object import OBJ_CATEGORIES, OBJ_GROUPS  # noqa: F401
 from emdb_simulator.core.camera_config import CustomCamerasMixin
 
 
