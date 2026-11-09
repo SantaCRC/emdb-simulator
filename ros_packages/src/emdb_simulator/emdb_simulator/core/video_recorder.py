@@ -233,7 +233,8 @@ class VideoRecorder:
         matching capture_frame() call -- for callers (e.g.
         scene_loader's /mark_episode_success) whose success signal can
         arrive after the last real physics step of an episode, when no
-        further capture_frame(success=True) call is coming to record it."""
+        further capture_frame(success=True) call is coming to record it.
+        """
         if self._current_episode_id is not None:
             self._episode_success = True
 

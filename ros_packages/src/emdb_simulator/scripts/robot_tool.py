@@ -242,7 +242,8 @@ def perform_edit(robot, prop, raw_value):
     if value_node.lineno != value_node.end_lineno:
         return {
             "ok": False,
-            "error": f"{prop} spans multiple lines in {robot['file']}:{value_node.lineno} -- too complex for this tool.",
+            "error": f"{prop} spans multiple lines in {robot['file']}:{value_node.lineno} "
+                     "-- too complex for this tool.",
         }
 
     if prop == "default_gripper":
@@ -253,7 +254,8 @@ def perform_edit(robot, prop, raw_value):
         if not isinstance(current, dict) or len(current) != 1:
             return {
                 "ok": False,
-                "error": f"default_gripper isn't a simple single-arm dict -- edit {robot['file']}:{value_node.lineno} by hand.",
+                "error": "default_gripper isn't a simple single-arm dict -- "
+                         f"edit {robot['file']}:{value_node.lineno} by hand.",
             }
         if raw_value not in EDIT_GRIPPER_NAMES:
             return {
@@ -273,12 +275,14 @@ def perform_edit(robot, prop, raw_value):
         if not is_np_array:
             return {
                 "ok": False,
-                "error": f"init_qpos isn't a plain np.array([...]) literal -- edit {robot['file']}:{value_node.lineno} by hand.",
+                "error": "init_qpos isn't a plain np.array([...]) literal -- "
+                         f"edit {robot['file']}:{value_node.lineno} by hand.",
             }
         try:
             ast.literal_eval(value_node.args[0])
         except ValueError:
-            return {"ok": False, "error": f"Couldn't parse current init_qpos -- edit {robot['file']}:{value_node.lineno} by hand."}
+            return {"ok": False, "error": "Couldn't parse current init_qpos -- "
+                                          f"edit {robot['file']}:{value_node.lineno} by hand."}
         try:
             new_values = parse_floats(raw_value)
         except ValueError:
@@ -469,7 +473,9 @@ def cmd_create_robot(_robots):
 
     init_torso_qpos = None
     base_name = next(b for tok, _, b, _ in BASE_CHOICES if tok == base_token)
-    if base_name and prompt("\nSet a custom init_torso_qpos (torso lift joint)? [y/N]", default="n").lower() in ("y", "yes"):
+    torso_answer = base_name and prompt(
+        "\nSet a custom init_torso_qpos (torso lift joint)? [y/N]", default="n")
+    if torso_answer and torso_answer.lower() in ("y", "yes"):
         init_torso_qpos = parse_floats(prompt("Comma-separated torso joint value(s)"))
 
     source, meta = generate_robot_source(class_name, arm_token, base_token, gripper_token, init_qpos, init_torso_qpos)
@@ -537,7 +543,8 @@ def cli_inspect(args):
     robots = find_robot_classes()
     robot = find_robot_by_name(robots, args.robot)
     if robot is None:
-        return fail([f"No robot named {args.robot!r} found. Run the 'list' subcommand to see available robots."], args.json)
+        return fail([f"No robot named {args.robot!r} found. "
+                     "Run the 'list' subcommand to see available robots."], args.json)
     props = robot_properties(robot)
     if args.json:
         print(
@@ -565,7 +572,8 @@ def cli_edit(args):
     robots = find_robot_classes()
     robot = find_robot_by_name(robots, args.robot)
     if robot is None:
-        return fail([f"No robot named {args.robot!r} found. Run the 'list' subcommand to see available robots."], args.json)
+        return fail([f"No robot named {args.robot!r} found. "
+                     "Run the 'list' subcommand to see available robots."], args.json)
     result = perform_edit(robot, args.param, args.value)
     if args.json:
         print(json.dumps(result))

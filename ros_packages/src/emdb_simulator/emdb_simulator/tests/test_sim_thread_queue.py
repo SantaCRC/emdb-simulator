@@ -5,9 +5,10 @@ created the MuJoCo/GLFW render context (see run_sim_loop() and
 _run_on_sim_thread() in scene_loader.py, and
 docs/source/howto/run_simulator.md). This exercises just that hand-off --
 job submitted from a "ROS callback" thread, executed on the "sim" thread,
-result/exception propagated back -- without needing rclpy/robosuite
-installed, since _run_on_sim_thread()/run_sim_loop() only touch
-self._sim_queue.
+result/exception propagated back -- without spinning up rclpy or a
+robosuite env, since _run_on_sim_thread()/run_sim_loop() only touch
+self._sim_queue. scene_loader still imports both at module level, so the
+test is skipped where either is missing (e.g. CI's ROS-only job).
 """
 import threading
 import types
@@ -15,6 +16,7 @@ import types
 import pytest
 
 pytest.importorskip("rclpy")
+pytest.importorskip("robosuite")
 from emdb_simulator.core.scene_loader import SceneLoader  # noqa: E402
 
 

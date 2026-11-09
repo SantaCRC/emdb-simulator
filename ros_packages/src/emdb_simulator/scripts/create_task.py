@@ -58,7 +58,8 @@ DEFAULT_OBJ_GROUPS = ["straw", "peeler", "sugar_cube", "shrimp"]
 TEMPLATES = [
     ("lift", "lift - pick up an object and raise it above a height threshold"),
     ("place", "place - move an object from one fixture to another"),
-    ("custom", "custom - freeform scaffold for composite/multi-object tasks (advanced -- you write _get_obj_cfgs/_check_success by hand afterward)"),
+    ("custom", "custom - freeform scaffold for composite/multi-object tasks "
+               "(advanced -- you write _get_obj_cfgs/_check_success by hand afterward)"),
 ]
 
 LIFT_TEMPLATE = Template(
@@ -424,7 +425,8 @@ def run_interactive():
         )
         lang_expr = lang_expr_for(description, '"TODO: describe the task in one sentence."')
         source = CUSTOM_TEMPLATE.substitute(class_name=class_name, lang_expr=lang_expr)
-        summary = "template=custom (freeform scaffold -- edit _setup_kitchen_references/_get_obj_cfgs/_check_success by hand)"
+        summary = ("template=custom (freeform scaffold -- edit "
+                   "_setup_kitchen_references/_get_obj_cfgs/_check_success by hand)")
 
     target = CORE_DIR / f"{module_name}.py"
     print(f"\nAbout to write {target} ({summary}).")
@@ -549,7 +551,8 @@ def build_arg_parser():
     p = argparse.ArgumentParser(description="Create a new emdb_simulator task, interactively or via flags.")
     p.add_argument("--name", help="PascalCase task class name. Passing this switches to non-interactive mode.")
     p.add_argument("--template", choices=["lift", "place", "custom"])
-    p.add_argument("--obj-groups", help="[lift/place] Comma-separated object groups (default: straw,peeler,sugar_cube,shrimp).")
+    p.add_argument("--obj-groups", help="[lift/place] Comma-separated object groups "
+                   "(default: straw,peeler,sugar_cube,shrimp).")
     p.add_argument("--fixture", help="[lift] Fixture to spawn the object on (default: ISLAND).")
     p.add_argument("--height", help="[lift] Lift height in meters (default: 0.10).")
     p.add_argument("--source", help="[place] Source fixture (default: COUNTER).")

@@ -1,0 +1,7 @@
+pytest
+pytest-cov
+numpy
+pyyaml
+scipy
+h5py
+imageio

@@ -13,7 +13,11 @@ permissions:
   contents: read
 
 jobs:
+  tests:
+    uses: ./.github/workflows/ci.yml
+
   build-and-push:
+    needs: tests
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -25,20 +29,11 @@ jobs:
           submodules: recursive
 
       - uses: docker/setup-buildx-action@v3
-
-      # Requires DOCKERHUB_USERNAME / DOCKERHUB_TOKEN repo secrets
-      # (Settings -> Secrets and variables -> Actions) -- not something
-      # this workflow can create for you.
       - uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # RoboCasa's kitchen assets are intentionally NOT baked into the
-      # image (see docker/Dockerfile.cpu/.gpu header comments and
-      # docs/source/howto/running_on_cesga.md) -- they're bind-mounted in
-      # at run time instead, so both variants stay well within a
-      # hosted runner's disk/time budget here.
       - uses: docker/build-push-action@v6
         with:
           context: .

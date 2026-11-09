@@ -22,7 +22,7 @@ from std_msgs.msg import Bool, Float32
 from std_srvs.srv import Trigger
 
 import robosuite
-import robocasa
+import robocasa  # noqa: F401  (registers robocasa envs)
 import robocasa.utils.object_utils as OU
 from robosuite.environments.base import REGISTERED_ENVS
 from robocasa.environments.kitchen.kitchen import Kitchen
@@ -67,7 +67,6 @@ from emdb_interfaces.msg import (
 # (robocasa/environments/kitchen/kitchen.py) -- randomized per episode in
 # _set_layout_style for scene diversity.
 FRUIT_SHOP_LAYOUT_IDS = (2, 4, 12, 21, 23)
-
 
 
 class SceneLoader(Node):
@@ -531,7 +530,8 @@ class SceneLoader(Node):
         robosuite.make()/env.reset()) and _set_layout_style (before every
         later reset) so a reset never runs one step behind whatever this
         just resolved -- see _create_env's comment for why that ordering
-        matters."""
+        matters.
+        """
         layout = self.layout_id
         style = self.style_id
 
@@ -1452,7 +1452,6 @@ class SceneLoader(Node):
                 grasped_msg = Bool()
                 grasped_msg.data = self._check_grasped(name)
                 grasped_pub.publish(grasped_msg)
-
 
     def _publish_perceptions_loop(self):
         self._run_on_sim_thread(self._publish_perceptions_loop_impl)
